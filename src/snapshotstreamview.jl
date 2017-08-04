@@ -50,4 +50,4 @@ function _step!(s::SnapshotStreamView)
 end
 
 # number of views returned
-Base.length(s::SnapshotStreamView) = s.N - 1
+Base.length(s::SnapshotStreamView) = s.N - length(s.buffer) + 2
