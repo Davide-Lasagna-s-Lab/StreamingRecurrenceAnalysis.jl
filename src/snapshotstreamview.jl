@@ -6,11 +6,6 @@ struct SnapshotStreamView{X, G}
          g::G         # the forward map
     buffer::Vector{X} # buffer with snapshots
          N::Int       # number of snapshots produced
-    function SnapshotStreamView{X, G}(g, buffer::Vector{X}, N::Int) where {X, G}
-        N ≥ length(buffer) - 1 ||
-            throw(ArgumentError("length of snapshot stream must be higher than buffer width"))
-        return new(g, buffer, N)
-    end
 end
 
 """
@@ -21,9 +16,16 @@ Construct a view over a stream of snapshots, starting from an initial condition
 work in-place. The view is a vector with elements of type `X` and length `width`.
 The snapshot stream terminates after `N` elements have been generated.
 """
-snapshot_stream_view(g, x₀::X, width::Int, N::Int) where {X} =
-    (buffer = X[similar(x₀) for i = 1:width]; buffer[1] .= x₀;
-     return SnapshotStreamView{X, typeof(g)}(g, buffer, N))
+function snapshot_stream_view(g, x₀::X, width::Int, N::Int) where {X}
+    N ≥ width - 1 ||
+        throw(ArgumentError("length of snapshot stream must be higher than buffer width"))
+    width > 0 ||
+        throw(ArgumentError("width must be positive, got $width"))    
+    buffer = X[similar(x₀) for i = 1:width]
+    buffer[1] .= x₀
+    SnapshotStreamView(g, buffer, N)
+end
+
 
 # ~~~ Iteration Protocol ~~~
 function Base.start(s::SnapshotStreamView)
