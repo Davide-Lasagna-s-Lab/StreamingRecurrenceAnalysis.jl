@@ -36,7 +36,8 @@ function Base.start(s::SnapshotStreamView)
     return length(s.buffer) - 2
 end
 
-Base.next(s::SnapshotStreamView, state) = (_step!(s), state+=1)
+# handle the width = 1 case
+Base.next(s::SnapshotStreamView, state) = (state < 0 ? s.buffer : _step!(s), state += 1)
 Base.done(s::SnapshotStreamView, state) = state == s.N
 
 # advance time and return buffer
