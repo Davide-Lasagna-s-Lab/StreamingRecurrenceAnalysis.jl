@@ -2,7 +2,7 @@ export snapshot_stream_view, _step!
 
 # This cannot be a subtype of AbstractVector, because its elements are 
 # inherently sequential.
-mutable struct SnapshotStreamView{T, G}
+struct SnapshotStreamView{T, G}
          g::G         # the forward map
     buffer::Vector{T} # buffer with snapshots
          N::Int       # number of snapshots produced
