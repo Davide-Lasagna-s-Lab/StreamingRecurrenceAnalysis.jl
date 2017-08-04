@@ -1,4 +1,4 @@
-export snapshot_stream_view, _step!
+export snapshot_stream_view, _step!, SnapshotStreamView
 
 # This cannot be a subtype of AbstractVector, because its elements are
 # inherently sequential.
