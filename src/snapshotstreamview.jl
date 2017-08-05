@@ -21,7 +21,7 @@ function snapshot_stream_view(g, x₀::X, width::Int, N::Int) where {X}
         throw(ArgumentError("length of snapshot stream must be higher than buffer width"))
     width > 0 ||
         throw(ArgumentError("width must be positive, got $width"))    
-    buffer = X[similar(x₀) for i = 1:width]
+    buffer = X[zero(x₀) for i = 1:width]
     buffer[1] .= x₀
     SnapshotStreamView(g, buffer, N)
 end
