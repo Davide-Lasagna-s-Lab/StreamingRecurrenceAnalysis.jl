@@ -29,7 +29,7 @@ end
 
 # ~~~ Iteration Protocol ~~~
 function Base.start(s::SnapshotStreamView)
-    # fill all buffer except one element
+    # fill all buffer minus the first and the last
     for i = 1:length(s.buffer) - 2
         _step!(s)
     end
