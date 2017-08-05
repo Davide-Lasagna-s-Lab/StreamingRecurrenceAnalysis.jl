@@ -88,3 +88,31 @@ end
         
     @test (@allocated dowork!(sview, u)) == 0
 end
+
+@testset "example usage with number              " begin
+    
+    # initial condition and temporary
+    x  = 1.0
+
+    # mapping
+    g(x) = x + 1.0
+
+    # have a stream of 10 snapshots with a view of width 2
+    sview = snapshot_stream_view(g, x, 2, 4)
+
+    # this will have allocations, because we have a vector in the next! tuple
+    function moving_average!(sview::SnapshotStreamView{X}, out::Vector{X}) where {X}
+        i = 0
+        for v in sview
+            out[i+=1] = mean(v)
+        end
+        out
+    end
+
+    out = moving_average!(sview, zeros(length(sview)))
+
+    @test out[1] == 1.5
+    @test out[2] == 2.5
+    @test out[3] == 3.5
+    @test out[4] == 4.5
+end
