@@ -37,11 +37,13 @@ function Base.start(s::SnapshotStreamView)
 end
 
 # handle the width = 1 case
-Base.next(s::SnapshotStreamView, state) = (state < 0 ? s.buffer : _step!(s), state += 1)
+@inline Base.next(s::SnapshotStreamView{X}, state) where {X} =
+    (state < 0 ? s.buffer : _step!(s), state+=1)
+
 Base.done(s::SnapshotStreamView, state) = state == s.N
 
 # advance time and return buffer
-function _step!(s::SnapshotStreamView)
+@inline function _step!(s::SnapshotStreamView)
     # copy current state `buffer[1]` to storage that will be overwritten
     s.buffer[end] .= s.buffer[1]
 
