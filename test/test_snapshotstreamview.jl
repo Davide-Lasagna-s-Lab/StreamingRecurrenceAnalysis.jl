@@ -3,27 +3,27 @@ using StreamingRecurrenceAnalysis
 
 @testset "iteration protocol - width != 1        " begin
     g(x₀) = (x₀ .+= 1; x₀)
-    output = ([[3], [2], [1]],
-              [[4], [3], [2]],
-              [[5], [4], [3]],
-              [[6], [5], [4]],
-              [[7], [6], [5]],
-              [[8], [7], [6]],
-              [[9], [8], [7]])
+    output = ([[1], [2], [3]],
+              [[2], [3], [4]],
+              [[3], [4], [5]],
+              [[4], [5], [6]],
+              [[5], [6], [7]],
+              [[6], [7], [8]],
+              [[7], [8], [9]])
     
-    sview = snapshot_stream_view(g, [1], 3, 2)
+    sview = streamview(g, [1], 3, 2)
     for (i, v) in enumerate(sview)
         @test v == output[i]
         @test i <= 1 # only one view is generated
     end
 
-    sview = snapshot_stream_view(g, [1], 3, 3)
+    sview = streamview(g, [1], 3, 3)
     for (i, v) in enumerate(sview)
         @test v == output[i]
         @test i <= 2 # only two views are generated
     end
 
-    sview = snapshot_stream_view(g, [1], 3, 8)
+    sview = streamview(g, [1], 3, 8)
     for (i, v) in enumerate(sview)
         @test v == output[i]
         @test i <= 7 # only seven views are generated
@@ -34,7 +34,7 @@ end
     g(x₀) = (x₀ .+= 1; x₀)
     output = ([[0]], [[1]], [[2]], [[3]], [[4]], [[5]], [[6]], [[7]])
     for N in 0:7
-        sview = snapshot_stream_view(g, [0], 1, N)
+        sview = streamview(g, [0], 1, N)
         for (i, v) in enumerate(sview)
             @test v == output[i]
             @test i <= N+1 # N+1 views are generated
@@ -43,19 +43,19 @@ end
 end
 
 @testset "error checking                         " begin
-    @test_throws ArgumentError snapshot_stream_view((), [1],  5, 1)
-    @test_throws ArgumentError snapshot_stream_view((), [1],  5, 2)
-    @test_throws ArgumentError snapshot_stream_view((), [1],  5, 3)
-    @test_throws ArgumentError snapshot_stream_view((), [1],  0, 0)
-    @test_throws ArgumentError snapshot_stream_view((), [1],  0, 1)
-    @test_throws ArgumentError snapshot_stream_view((), [1], -1, 1)
+    @test_throws ArgumentError streamview((), [1],  5, 1)
+    @test_throws ArgumentError streamview((), [1],  5, 2)
+    @test_throws ArgumentError streamview((), [1],  5, 3)
+    @test_throws ArgumentError streamview((), [1],  0, 0)
+    @test_throws ArgumentError streamview((), [1],  0, 1)
+    @test_throws ArgumentError streamview((), [1], -1, 1)
 end
 
 @testset "length                                 " begin
     g(x₀) = (x₀ .+= 1; x₀)
     for width = 1:5
         for N = (width-1):10
-            sview = snapshot_stream_view(g, [0], width, N)
+            sview = streamview(g, [0], width, N)
             @test length(collect(sview)) == length(sview)
         end
     end
@@ -71,10 +71,10 @@ end
     g(x₀) = (x₀ .+= 1.0; x₀)
 
     # have a stream of 10 snapshots with a view of width 2
-    sview = snapshot_stream_view(g, x, 20, 100)
+    sview = streamview(g, x, 20, 100)
 
     # sum
-    function dowork!(sview::SnapshotStreamView{X}, u::X) where {X}
+    function dowork!(sview::StreamView{X}, u::X) where {X}
         for v in sview     # the current view
             for snap in v  # each snapshot in the view 
                 u .+= snap # do stuff
@@ -98,10 +98,10 @@ end
     g(x) = x + 1.0
 
     # have a stream of 10 snapshots with a view of width 2
-    sview = snapshot_stream_view(g, x, 2, 4)
+    sview = streamview(g, x, 2, 4)
 
     # this will have allocations, because we have a vector in the next! tuple
-    function moving_average!(sview::SnapshotStreamView{X}, out::Vector{X}) where {X}
+    function moving_average!(sview::StreamView{X}, out::Vector{X}) where {X}
         i = 0
         for v in sview
             out[i+=1] = mean(v)
