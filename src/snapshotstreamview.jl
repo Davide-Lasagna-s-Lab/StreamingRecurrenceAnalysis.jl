@@ -1,7 +1,6 @@
 export snapshot_stream_view, _step!, SnapshotStreamView
 
-# This cannot be a subtype of AbstractVector, because its elements are
-# inherently sequential.
+# This is not <: AbstractVector, because its elements might be sequential.
 struct SnapshotStreamView{X, G}
          g::G         # the forward map
     buffer::Vector{X} # buffer with snapshots
@@ -22,10 +21,9 @@ function snapshot_stream_view(g, x₀::X, width::Int, N::Int) where {X}
     width > 0 ||
         throw(ArgumentError("width must be positive, got $width"))    
     buffer = X[zero(x₀) for i = 1:width]
-    buffer[1] .= x₀
+    buffer[end] .= x₀
     SnapshotStreamView(g, buffer, N)
 end
-
 
 # ~~~ Iteration Protocol ~~~
 function Base.start(s::SnapshotStreamView)
@@ -45,10 +43,10 @@ Base.done(s::SnapshotStreamView, state) = state == s.N
 # advance time and return buffer
 @inline function _step!(s::SnapshotStreamView)
     # copy current state `buffer[1]` to storage that will be overwritten
-    s.buffer[end] .= s.buffer[1]
+    s.buffer[1] .= s.buffer[end]
 
     # remove last, advance in time, then insert at the beginning
-    insert!(s.buffer, 1, s.g(pop!(s.buffer)))
+    insert!(s.buffer, length(s.buffer), s.g(shift!(s.buffer)))
 end
 
 # number of views returned
