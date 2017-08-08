@@ -1,3 +1,4 @@
+using BenchmarkTools
 using Base.Test
 using StreamingRecurrenceAnalysis
 
@@ -91,20 +92,16 @@ end
 
 @testset "example usage with number              " begin
     
-    # initial condition and temporary
-    x  = 1.0
-
     # mapping
-    g(x) = x + 1.0
+    g(x) = x + one(x)
 
     # have a stream of 10 snapshots with a view of width 2
-    sview = streamview(g, x, 2, 4)
+    sview = streamview(g, 1, 2, 4)
 
     # this will have allocations, because we have a vector in the next! tuple
-    function moving_average!(sview::StreamView{X}, out::Vector{X}) where {X}
-        i = 0
-        for v in sview
-            out[i+=1] = mean(v)
+    function moving_average!(sview::StreamView{X}, out::Vector) where {X}
+        for (i, v) in enumerate(sview)
+            out[i] = mean(v)
         end
         out
     end

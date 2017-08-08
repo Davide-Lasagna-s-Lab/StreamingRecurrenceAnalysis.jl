@@ -27,7 +27,7 @@ function streamview(g, x₀::X, width::Int, N::Int) where {X}
 end
 
 # ~~~ Iteration Protocol ~~~
-function Base.start(s::StreamView)
+@inline function Base.start(s::StreamView)
     # fill all buffer minus the first and the last
     for i = 1:length(s.buffer) - 2
         _step!(s)
@@ -39,12 +39,12 @@ end
 @inline Base.next(s::StreamView{X}, state) where {X} =
     (state < 0 ? s.buffer : _step!(s), state+=1)
 
-Base.done(s::StreamView, state) = state == s.N
+@inline Base.done(s::StreamView, state) = state == s.N
 
 # advance time and return buffer
 @inline function _step!(s::StreamView)
     # copy current state `buffer[1]` to storage that will be overwritten
-    s.buffer[1] .= s.buffer[end]
+    @inbounds s.buffer[1] .= s.buffer[end]
 
     # remove last, advance in time, then insert at the beginning
     insert!(s.buffer, length(s.buffer), s.g(shift!(s.buffer)))
