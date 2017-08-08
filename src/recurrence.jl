@@ -13,7 +13,8 @@ centre(t::Tile) = t[2, 2]
 end
 
 # ~~~ Tile iterator over a slice ~~~
-struct TileIterator{D}
+struct TileIterator{D, X}
+              x::X
               R::Vector{Vector{D}}
     startoffset::Int
 end
@@ -27,10 +28,10 @@ end
         g = s.R[1][state  ]; h = s.R[2][state  ]; i = s.R[3][state  ]
     end
     # return the offset of the current tile and the tile
-    (state, Tile(((a, b, c),
-                  (d, e, f),
-                  (g, h, i)))), state+1
-end
+    (s.x, state, Tile(((a, b, c),
+                       (d, e, f),
+                       (g, h, i)))), state+1
+end   
 
 # ~~~ THE STREAMING RECURRENCE MATRIX ~~~
 struct StreamDistMatrix{S<:StreamView, F, D}
@@ -65,7 +66,7 @@ end
     insert!(srm.R, 
             length(srm.R), 
             _kernel(shift!(srm.R), srm.startoffset, window, srm.dist))
-    srm.R, state
+    (srm.R, window[2]), state
 end
 
 @inline function _kernel(r, startoffset, window, dist)
@@ -84,27 +85,18 @@ end
 
 @inline Base.start(t::Tiles) = start(t.d)
 @inline function Base.next(t::Tiles, state) 
-    R, state = next(t.d, state)
-    TileIterator(R, t.d.startoffset), state
+    (R, x), state = next(t.d, state)
+    TileIterator(x, R, t.d.startoffset), state
 end
 @inline Base.done(t::Tiles, state) = done(t.d, state)
 
 tiles(d::StreamDistMatrix) = Iterators.flatten(Tiles(d))
 
 # ~~~ Iterator over Recurrences  ~~~
-recurrences(R::StreamDistMatrix) = 
-    Iterators.filter((data)->isminimum(data[2]), tiles(R))
-
-# ~~~ Iteration over the entries ~~~
-struct Entries{T<:Tiles}
-    tiles::T
+function recurrences(R::StreamDistMatrix, predicate::Function=(x->true))
+    # filter based on minima and custom predicate
+    g(data) = isminimum(data[2]) && predicate(centre(data[3]))
+    f = Iterators.filter(g, tiles(R))
+    # unpack and return: current state, offset and cargo
+    ((data[1], data[2]) for data in f)
 end
-
-entries(R::StreamDistMatrix) = Entries(tiles(R))
-
-@inline Base.start(s::Entries) = start(s.tiles)
-@inline function Base.next(s::Entries, state) 
-    tile, state = next(s.tiles, state)
-    (i, j, value(centre(tile))), state
-end
-@inline Base.done(s::Entries) = done(s.tiles, state)
