@@ -263,7 +263,7 @@ end
     # test recurrences
     output = [(2, Tile(((1,  1,  1),
                         (1,  0,  3),
-                        (1,  2,  2)))),]
+                        (1,  2,  2))))]
     counter = 1
     sview = streamview(g, data[1], 5, length(data)-1)
     R = streamdistmat(sview, dist, 1)
