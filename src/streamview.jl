@@ -50,6 +50,9 @@ Base.done(s::StreamView, state) = state == s.N
     insert!(s.buffer, length(s.buffer), s.g(shift!(s.buffer)))
 end
 
+# width of the view
+width(s::StreamView) = length(s.buffer)
+
 # number of views returned
 Base.length(s::StreamView) = s.N - length(s.buffer) + 2
 Base.eltype(s::StreamView{X}) where {X} = Vector{X}
