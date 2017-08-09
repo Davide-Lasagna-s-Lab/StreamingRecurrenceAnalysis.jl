@@ -33,6 +33,7 @@ end
                        (g, h, i)))), state+1
 end   
 
+
 # ~~~ THE STREAMING RECURRENCE MATRIX ~~~
 struct StreamDistMatrix{S<:StreamView, F, D}
           sview::S
@@ -41,18 +42,22 @@ struct StreamDistMatrix{S<:StreamView, F, D}
               R::Vector{Vector{D}} # three vectors of eltype D
 end
 
-function streamdistmat(sview::StreamView, dist, startoffset::Int)
-    # get one element of the stream, compute distance and 
-    # initialise vectors R with appropriate type
-    x = sview.buffer[1]
-    res = dist(x, x)
-    R = Vector{typeof(res)}[[zero(res) for i = 1:width(sview)] for j = 1:3]
+function streamdistmat(sview::StreamView{X}, dist, startoffset::Int) where {X}
+    D = Core.Inference.return_type(dist, (X, X))
+    R = Vector{D}[] # do not fill with data yet
     StreamDistMatrix(sview, dist, startoffset, R)
 end
 
 # ~~~ Iteration over the slices ~~~
 @inline function Base.start(srm::StreamDistMatrix)
-    _, state = _advance(srm, start(srm.sview))
+    # start view, get one snapshot, and initialise `R` properly
+    state = start(srm.sview)
+    d = srm.dist(first(srm.sview)), first(srm.sview)))
+    push!(srm.R, zeros(d, width(srm.view)))
+    push!(srm.R, zeros(d, width(srm.view)))
+    push!(srm.R, zeros(d, width(srm.view)))
+    # fill two entries, then return state (of the sview)
+    _, state = _advance(srm, state)
     _, state = _advance(srm, state)
     state
 end
@@ -66,6 +71,7 @@ end
     insert!(srm.R, 
             length(srm.R), 
             _kernel(shift!(srm.R), srm.startoffset, window, srm.dist))
+    # return slice of distance matrix and current snapshot
     (srm.R, window[2]), state
 end
 
