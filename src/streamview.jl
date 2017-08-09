@@ -53,6 +53,9 @@ end
 # width of the view
 width(s::StreamView) = length(s.buffer)
 
+# the first element in the view
+Base.first(s::StreamView) = s.buffer[1]
+
 # number of views returned
 Base.length(s::StreamView) = s.N - length(s.buffer) + 2
 Base.eltype(s::StreamView{X}) where {X} = Vector{X}
