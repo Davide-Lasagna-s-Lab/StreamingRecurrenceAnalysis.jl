@@ -24,5 +24,5 @@ end
 @inline function step!(s::StreamView{X}) where {X}
     @inbounds s.buf[1] .= s.buf[end]
     push!(s.buf, s.g(shift!(s.buf)))
-    return s
+    s
 end
