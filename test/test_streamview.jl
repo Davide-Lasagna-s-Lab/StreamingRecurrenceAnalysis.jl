@@ -53,7 +53,6 @@ end
 
     # warm up
     dowork!(sview, u)
-    @btime $dowork!($sview, $u)
         
     @test (@allocated dowork!(sview, u)) == 0
 end
