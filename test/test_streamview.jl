@@ -56,3 +56,33 @@ end
         
     @test (@allocated dowork!(sview, u)) == 0
 end
+
+struct LogisticMap
+    r::Float64
+end
+@inline (k::LogisticMap)(x) = x*k.r*(1-x)
+
+@testset "example usage with allocation          " begin
+    
+    # make stream
+    sview = streamview(LogisticMap(0.4), 0.5, 200)
+
+    # sum
+    function dowork!(sview::StreamView{X}) where {X}
+        s = zero(X)
+        for i = 1:10000
+            step!(sview)
+            # this enables vectorisation and obtain 4x speed up
+            @simd for i in 1:length(sview)
+                @inbounds s += sview[i]
+            end
+        end
+        s
+    end
+
+    # warm up
+    dowork!(sview)
+            
+    # still small allocation in this test
+    @test (@allocated dowork!(sview)) == 16
+end
