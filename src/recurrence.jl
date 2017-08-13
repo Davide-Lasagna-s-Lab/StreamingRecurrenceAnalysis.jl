@@ -1,4 +1,4 @@
-export streamdistmat, recurrences, entries
+export streamdistmat, recurrences, entries, distance, meta
 
 # ~~~ DISTANCE INFO BETWEEN TWO STATES ~~~
 struct DistInfo{T, D}
@@ -110,21 +110,28 @@ Base.done(sdm::StreamDistMatrix, Δi) = Δi == sdm.N+4
 
 
 # ~~~ Iteration over the entries of the distance matrix ~~~
-struct StreamDistMatrixEntries{I}
-          itr::I    # flatten views
-         Δmin::Int  # minimum shift
-    normalise::Bool 
+struct StreamDistMatrixEntries{I, F}
+     itr::I    # flatten views
+    Δmin::Int  # minimum shift
+    size::Tuple{Int, Int}
+     fun::F    # what quantity to produce 
 end
 
-entries(R::StreamDistMatrix, normalise::Bool=true) = 
-    StreamDistMatrixEntries(Iterators.flatten(R), first(R.ΔminΔmax), normalise)
+function entries(R::StreamDistMatrix, fun::Union{typeof.((distance, meta))...}=distance)
+    Δmax = last(R.ΔminΔmax)
+    Δmin = first(R.ΔminΔmax)
+    StreamDistMatrixEntries(Iterators.flatten(R), Δmin, (Δmax-Δmin+1, R.N), fun)
+end
+
+# Iterator interface
+Base.iteratorsize(::Type{<:StreamDistMatrixEntries}) = Base.HasShape()
+Base.size(s::StreamDistMatrixEntries) = s.size
+Base.length(s::StreamDistMatrixEntries) = prod(size(s))
 
 Base.start(s::StreamDistMatrixEntries) = start(s.itr)
 function Base.next(s::StreamDistMatrixEntries, state) 
     # unpack and return items of interest
     (x, Δi, Δj, distinfo), state = next(s.itr, state)
-    Δi = s.normalise ? Δi - 3         : Δi
-    Δj = s.normalise ? Δj - s.Δmin + 1: Δj
-    (Δi, Δj, distance(distinfo), meta(distinfo)), state
+    s.fun(distinfo), state
 end
 Base.done(s::StreamDistMatrixEntries, state) = done(s.itr, state)

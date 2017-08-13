@@ -1,9 +1,7 @@
 using BenchmarkTools
 using Base.Test
 using  StreamingRecurrenceAnalysis
-import StreamingRecurrenceAnalysis: _isrecurrence, 
-                                    unpack,
-                                    step!
+import StreamingRecurrenceAnalysis: _isrecurrence
 
 @testset "Tile                                   " begin
     t = ((1, 2, 3),
@@ -52,19 +50,14 @@ const DATA = [0.10000, 0.36000, 0.92160, 0.28901, 0.82193,
 
     # allowed shifts
     for ΔminΔmax in [1:2, 3:10, 2:5]
-        for N = [1, 5]
+        for N = [2, 5]
             # streaming object
             R = streamdistmat(LogisticMap(4), 0.1, dist, ΔminΔmax, N)
+            out_d = collect(entries(R, distance))
 
-            # fill with output
-            out_d = Matrix{Float64}(       length(ΔminΔmax), N)
-            out_m = Matrix{Tuple{Float64}}(length(ΔminΔmax), N)
-
-            # indices are automatically shifted
-            for (i, j, d, m) in entries(R, true)
-                out_d[j, i] = d
-                out_m[j, i] = m
-            end
+            # needs restarting!
+            R = streamdistmat(LogisticMap(4), 0.1, dist, ΔminΔmax, N)
+            out_m = collect(entries(R, meta))
 
             # this is the expected output. We always start at four, because
             # we need three shifts from 2 to obtain the first full slice.
