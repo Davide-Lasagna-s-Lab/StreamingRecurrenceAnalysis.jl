@@ -17,7 +17,7 @@ isrecurrence(d::DistInfo) = _isrecurrence(d.dist)
 end
 
 # ~~~ VIEW OVER ENTRIES OF DISTANCE MATRIX ~~~
-struct DistMatrixView{F,T,D}
+struct DistMatrixView{T,D,F}
     distfun::F
        dist::Vector{Vector{T}}
        meta::Vector{Vector{D}}
@@ -56,7 +56,7 @@ function Base.next(dmv::DistMatrixView, j)
 end
 
 # ~~~ ITERATION OVER SLICES OF DISTANCE MATRIX ~~~
-struct StreamDistMatrix{T, D, X, F, DMV<:DistMatrixView{F, T, D}, S1<:StreamView{X}, S2<:StreamView{X}}
+struct StreamDistMatrix{T,D,X,F,DMV<:DistMatrixView{T,D,F},S1<:StreamView{X},S2<:StreamView{X}}
     distmatv::DMV            # current view over distance matrix
     ΔminΔmax::UnitRange{Int} # range of shifts
       window::S1             # view over future snapshots
