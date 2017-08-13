@@ -1,273 +1,202 @@
 using BenchmarkTools
 using Base.Test
-import StreamingRecurrenceAnalysis: Tile, 
-                                    isminimum, 
-                                    TileIterator, 
-                                    streamview,
-                                    streamdistmat,
-                                    tiles,
-                                    recurrences,
-                                    centre
+using  StreamingRecurrenceAnalysis
+import StreamingRecurrenceAnalysis: _isminimum, 
+                                    _centre,
+                                    unpack,
+                                    step!
+
 
 @testset "Tile                                   " begin
-    t = Tile(((1, 2, 3),
-              (1, 0, 3),
-              (1, 2, 3)))
-    @test isminimum(t) == true
+    t = ((1, 2, 3),
+         (1, 0, 3),
+         (1, 2, 3))
+    @test _isminimum(t) == true
+    @test _centre(t) == 0
 
-    t = Tile(((1, 0, 3),
-              (1, 4, 3),
-              (1, 2, 3)))
-    @test isminimum(t) == false
+    t = ((1, 0, 3),
+         (1, 4, 3),
+         (1, 2, 3))
+    @test _isminimum(t) == false
+    @test _centre(t) == 4
 
-    t = Tile(((1, 1, 1),
-              (1, 1, 1),
-              (1, 1, 1)))
-    @test isminimum(t) == false
+    t = ((1, 1, 1),
+         (1, 1, 1),
+         (1, 1, 1))
+    @test _isminimum(t) == false
+    @test _centre(t) == 1
 
-    t = Tile(((1, 2, 1),
-              (1, 1, 1),
-              (1, 1, 1)))
-    @test isminimum(t) == false
+    t = ((1, 2, 1),
+         (1, 1, 1),
+         (1, 1, 1))
+    @test _isminimum(t) == false
+    @test _centre(t) == 1
 end
 
-@testset "TileIterator                           " begin
-    dists = [[0, 2, 4, 0, 4, 1], 
-             [0, 2, 2, 1, 8, 6],
-             [0, 6, 1, 8, 3, 9]]
+# truncated logistic map
+struct LogisticMap
+    r::Float64
+end
+(k::LogisticMap)(x) = round(x*k.r*(1-x), 5)
+# # GENERATE DATA
+# x = 0.1
+# k = LogisticMap(4)
+# for i = 1:25
+#     println(x)
+#     x = k(x)
+# end
+const DATA = [0.10000, 0.36000, 0.92160, 0.28901, 0.82193, 
+              0.58544, 0.97080, 0.11339, 0.40213, 0.96169, 
+              0.14737, 0.50261, 0.99997, 0.00012, 0.00048,
+              0.00192, 0.00767, 0.03044, 0.11805, 0.41646, 
+              0.97208, 0.10856, 0.38710, 0.94901, 0.19356]
 
-    # moving slice
-    sl = TileIterator(dists, 1)
+@testset "DistMatrixView                         " begin
+    # the distance function plus meta information
+    dist(x, y) = (abs(x-y), x^2)
 
-    # expected output
-    output = [(1, Tile(((4, 2, 1),   # tile centred at index two
-                        (2, 2, 6),   # for an offset equal to one
-                        (0, 0, 0)))),
-              (2, Tile(((0, 1, 8), 
-                        (4, 2, 1), 
-                        (2, 2, 6)))),
-              (3, Tile(((4, 8, 3),
-                        (0, 1, 8), 
-                        (4, 2, 1)))),
-              (4, Tile(((1, 6, 9),
-                        (4, 8, 3),
-                        (0, 1, 8))))]
-    # typical usage             
-    for (i, (offset, tile)) in enumerate(sl)
-        @test output[i] == (offset, tile)
+    @testset "streamviews                        " begin
+        # test minimum shift
+        @test_throws ArgumentError streamdistmat(LogisticMap(4), 0.1, dist, 0:5, 2)
+
+        # test numbers in the views are consistent with what generated above
+        R = streamdistmat(LogisticMap(4), 0.1, dist, 1:2, 2)
+        @test R.distmatv.x      == DATA[1:3]
+        @test R.distmatv.window == DATA[3:6]
+        step!(R.distmatv)
+        @test R.distmatv.x      == DATA[2:4]
+        @test R.distmatv.window == DATA[4:7]
+
+        # another case
+        R = streamdistmat(LogisticMap(4), 0.1, dist, 2:4, 2)
+        @test R.distmatv.x      == DATA[1:3]
+        @test R.distmatv.window == DATA[4:8]
+        step!(R.distmatv)
+        @test R.distmatv.x      == DATA[2:4]
+        @test R.distmatv.window == DATA[5:9]
+
+        # test lengths of views
+        R = streamdistmat(LogisticMap(4), 0.1, dist, 1:5, 2)
+        @test length(R.distmatv.x) == 3
+        @test length(R.distmatv.window) == 7
+
+        R = streamdistmat(LogisticMap(4), 0.1, dist, 6:7, 2)
+        @test length(R.distmatv.x) == 3
+        @test length(R.distmatv.window) == 4
+
+        # test consistency of the shift
+        R = streamdistmat(LogisticMap(4), 0.1, dist, 1:5, 2)
+        @test R.distmatv.x[3] == R.distmatv.window[1]
+        step!(R.distmatv)
+        @test R.distmatv.x[3] == R.distmatv.window[1]
+
+        # another case, where x lags window by one 
+        R = streamdistmat(LogisticMap(4), 0.1, dist, 2:5, 2)
+        val = R.distmatv.window[1]
+        step!(R.distmatv)
+        @test R.distmatv.x[3] == val
+
+        # a further case, where x lags window by three
+        R = streamdistmat(LogisticMap(4), 0.1, dist, 4:5, 2)
+        val = R.distmatv.window[1]
+        step!(R.distmatv); step!(R.distmatv); step!(R.distmatv)
+        @test R.distmatv.x[3] == val
     end
-end
 
-@testset "streamdistmat                          " begin
-    # generate a known stream of Ints
-    counter = 1
-    data = [1, 3, 5, 1, 4, 7, 9, 2, 8, 3, 1, 0]
-    g(x₀) = data[counter+=1]
-    dist(x, y) = abs(x-y)
+    @testset "distance function plus meta        " begin
+        R = streamdistmat(LogisticMap(4), 0.1, dist, 1:2, 2)
 
-    sview = streamview(g, data[1], 4, 10)
+        # fill distance matrices
+        step!(R.distmatv)
+        step!(R.distmatv)
+        step!(R.distmatv)
 
-    # these will be the views generated
-    views = Vector{Int}[[1, 3, 5, 1],
-                        [3, 5, 1, 4],
-                        [5, 1, 4, 7],
-                        [1, 4, 7, 9],
-                        [4, 7, 9, 2],
-                        [7, 9, 2, 8],
-                        [9, 2, 8, 3],
-                        [2, 8, 3, 1]]
-    # test they actually are                        
-    @test [copy(view) for view in sview] == views             
-             
-    # streaming distance matrix
-    R = streamdistmat(sview, dist, 1)
+        # test eltypes 
+        @test eltype(R.distmatv.dist) == Vector{Float64}
+        @test eltype(R.distmatv.meta) == Vector{Tuple{Float64}}
 
-    # this will be the distances calculated             
-    dists = [[0, 2, 4, 0], 
-             [0, 2, 2, 1],
-             [0, 4, 1, 2],
-             [0, 3, 6, 8],
-             [0, 3, 5, 2],
-             [0, 2, 5, 1],
-             [0, 7, 1, 6],
-             [0, 6, 1, 1]]
+        # this is what should have been computed in the three steps
+        # the j is the shift applied to the data. Extract the dist
+        # part and discard the meta information
+        d = [[ dist(DATA[i], DATA[i+j])[1]   for j = 0:3] for i = 4:6]
+        m = [[(dist(DATA[i], DATA[i+j])[2],) for j = 0:3] for i = 4:6]
+        @test d == R.distmatv.dist
+        @test m == R.distmatv.meta
 
-    # these will be the triplets generated    
-    output = [[[0, 2, 4, 0], 
-               [0, 2, 2, 1],
-               [0, 4, 1, 2]],
-              [[0, 2, 2, 1],
-               [0, 4, 1, 2],
-               [0, 3, 6, 8]],
-              [[0, 4, 1, 2],
-               [0, 3, 6, 8],
-               [0, 3, 5, 2]],
-              [[0, 3, 6, 8],
-               [0, 3, 5, 2],
-               [0, 2, 5, 1]],
-              [[0, 3, 5, 2],
-               [0, 2, 5, 1],
-               [0, 7, 1, 6]],
-              [[0, 2, 5, 1],
-               [0, 7, 1, 6],
-               [0, 6, 1, 1]]]  
+        # another example
+        R = streamdistmat(LogisticMap(4), 0.1, dist, 2:4, 2)
 
-    # reset counter for data generation
-    counter = 1     
-    sview = streamview(g, data[1], 4, 10)
-    for (i, r) in enumerate(R)
-        @test output[i] == r
+        # fill distance matrices
+        step!(R.distmatv)
+        step!(R.distmatv)
+        step!(R.distmatv)
+
+        # this is what should have been computed in the three steps
+        d = [[ dist(DATA[i], DATA[i+j])[1]   for j = 1:5] for i = 4:6]
+        m = [[(dist(DATA[i], DATA[i+j])[2],) for j = 1:5] for i = 4:6]
+        @test d == R.distmatv.dist
+        @test m == R.distmatv.meta
     end
-end
 
-@testset "tiles                                  " begin
-    # generate a known stream of Ints
-    counter = 1
-    data = [1, 3, 5, 1, 4, 7, 9, 2, 8, 3, 1, 0]
-    g(x₀) = data[counter+=1]
-    dist(x, y) = abs(x-y)
-    sview = streamview(g, data[1], 4, 10)
-                    
-    # streaming distance matrix
-    R = streamdistmat(sview, dist, 1)
+    @testset "iteration over the view            " begin
+        for ΔminΔmax in [1:4, 2:4]
+            R = streamdistmat(LogisticMap(4), 0.1, dist, ΔminΔmax, 1)
+            # start up the view properly
+            r = R.distmatv; step!(r); step!(r); step!(r)
+            # this is the current state
+            for c in [5, 6, 7, 8, 9] 
+                for (i, el) in enumerate(r)
+                    # at this point the current state is the fifth
+                    @test snapshot(el) == DATA[c]
+                    # the shift is what given via ΔminΔmax
+                    @test shift(el) == ΔminΔmax[i]
+                    # check distance and meta
+                    @test distance(el) ==  dist(DATA[c], DATA[c+shift(el)])[1]
+                    @test     meta(el) == (dist(DATA[c], DATA[c+shift(el)])[2], )
+                end
+                # shift and check again
+                step!(r)
+            end
+        end
 
-    # these will be the triplets generated    
-    # output = [[[0, 2, 4, 0], 
-    #            [0, 2, 2, 1],
-    #            [0, 4, 1, 2]],
-    #           [[0, 2, 2, 1],
-    #            [0, 4, 1, 2],
-    #            [0, 3, 6, 8]],
-    #           [[0, 4, 1, 2],
-    #            [0, 3, 6, 8],
-    #            [0, 3, 5, 2]],
-    #           [[0, 3, 6, 8],
-    #            [0, 3, 5, 2],
-    #            [0, 2, 5, 1]],
-    #           [[0, 3, 5, 2],
-    #            [0, 2, 5, 1],
-    #            [0, 7, 1, 6]],
-    #           [[0, 2, 5, 1],
-    #            [0, 7, 1, 6],
-    #            [0, 6, 1, 1]]]  
-    # use this for generation
-    # for o in output
-    #     D = hcat(o...)
-    #     display(flipdim(D[1:3, :], 1)); println()
-    #     display(flipdim(D[2:4, :], 1)); println()
-    # end
-
-    ts = [(1, Tile(((4,  2,  1),
-                    (2,  2,  4),
-                    (0,  0,  0)))),
-          (2, Tile(((0,  1,  2),
-                    (4,  2,  1),
-                    (2,  2,  4)))),
-          (1, Tile(((2,  1,  6),
-                    (2,  4,  3),
-                    (0,  0,  0)))),
-          (2, Tile(((1,  2,  8),
-                    (2,  1,  6),
-                    (2,  4,  3)))),
-          (1, Tile(((1,  6,  5),
-                    (4,  3,  3),
-                    (0,  0,  0)))),
-          (2, Tile(((2,  8,  2),
-                    (1,  6,  5),
-                    (4,  3,  3)))),
-          (1, Tile(((6,  5,  5),
-                    (3,  3,  2),
-                    (0,  0,  0)))),
-          (2, Tile(((8,  2,  1),
-                    (6,  5,  5),
-                    (3,  3,  2)))),
-          (1, Tile(((5,  5,  1),
-                    (3,  2,  7),
-                    (0,  0,  0)))),
-          (2, Tile(((2,  1,  6),
-                    (5,  5,  1),
-                    (3,  2,  7)))),
-          (1, Tile(((5,  1,  1),
-                    (2,  7,  6),
-                    (0,  0,  0)))),
-          (2, Tile(((1,  6,  1),
-                    (5,  1,  1),
-                    (2,  7,  6))))]
-
-    for (i, (offset, tile)) in enumerate(tiles(R))
-       @test ts[i] == (offset, tile)
+        # checkbounds
+        ΔminΔmax = 2:4
+        R = streamdistmat(LogisticMap(4), 0.1, dist, ΔminΔmax, 1)
+        r = R.distmatv
+        @test_throws BoundsError r[1]
+        @test_throws BoundsError r[5]
     end
 end
 
-@testset "recurrences                            " begin
-   # generate a known stream of Ints
-    counter = 1
-    data = [1, 2, 3, 1, 3, 4, 2, 6]
-    g(x₀) = data[counter+=1]
-    dist(x, y) = abs(x-y)
+@testset "Distance Matrix Entries                " begin
+    # the distance function plus meta information
+    dist(x, y) = (abs(x-y), x^2)
 
-    # test views
-    sview = streamview(g, data[1], 5, length(data)-1)
+    # allowed shifts
+    for ΔminΔmax in [1:3, 5:6]
 
-    output = [[1, 2, 3, 1, 3],
-              [2, 3, 1, 3, 4],
-              [3, 1, 3, 4, 2],
-              [1, 3, 4, 2, 6]]
+        # streaming object
+        R = streamdistmat(LogisticMap(4), 0.1, dist, ΔminΔmax, 10)
 
-    for (i, s) in enumerate(sview)
-        @test output[i] == s
-    end
+        # fill with output
+        out_d = Matrix{Float64}(       length(ΔminΔmax), 10)
+        out_m = Matrix{Tuple{Float64}}(length(ΔminΔmax), 10)
 
-    # test streaming distance matrix
-    counter = 1
-    sview = streamview(g, data[1], 5, length(data)-1)
-    R = streamdistmat(sview, dist, 1)
+        # indices are automatically shifted
+        for (i, j, d, m) in entries(R, true)
+            out_d[j, i] = d
+            out_m[j, i] = m
+        end
 
-    output = [[[0, 1, 2, 0, 2], 
-               [0, 1, 1, 1, 2], 
-               [0, 2, 0, 1, 1]],
-              [[0, 1, 1, 1, 2], 
-               [0, 2, 0, 1, 1], 
-               [0, 2, 3, 1, 5]]]
-
-    for (i, s) in enumerate(R)
-        @test output[i] == s
-    end
-
-    # test tiles
-    output = [(1, Tile(((2,  1,  0),
-                        (1,  1,  2),
-                        (0,  0,  0)))),
-              (2, Tile(((0,  1,  1),
-                        (2,  1,  0),
-                        (1,  1,  2)))),
-              (3, Tile(((2,  2,  1),
-                        (0,  1,  1),
-                        (2,  1,  0)))),
-              (1, Tile(((1,  0,  3),
-                        (1,  2,  2),
-                        (0,  0,  0)))),
-              (2, Tile(((1,  1,  1),
-                        (1,  0,  3),
-                        (1,  2,  2)))),
-              (3, Tile(((2,  1,  5),
-                        (1,  1,  1),
-                        (1,  0,  3))))]
-    counter = 1
-    sview = streamview(g, data[1], 5, length(data)-1)
-    R = streamdistmat(sview, dist, 1)
-    for (i, (offset, tile)) in enumerate(tiles(R))
-        @test output[i] == (offset, tile)
-    end
-
-    # test recurrences
-    output = [(2, Tile(((1,  1,  1),
-                        (1,  0,  3),
-                        (1,  2,  2))))]
-    counter = 1
-    sview = streamview(g, data[1], 5, length(data)-1)
-    R = streamdistmat(sview, dist, 1)
-    for (i, (offset, tile)) in enumerate(recurrences(R))
-        @test output[i] == (x, offset)
+        # this is the expected output. We always start at five, because
+        # we need three shifts from 2 to obtain the first full slice.
+        # The streaming implementation loops over the entries of this
+        # matrix, avoid the full storage of hyper-long simulations.
+        # i runs from five to 14, because we asked for ten shifts
+        d = [ dist(DATA[i], DATA[i+j])[1]   for j = ΔminΔmax, i = 5:14]
+        m = [(dist(DATA[i], DATA[i+j])[2],) for j = ΔminΔmax, i = 5:14]
+    
+        @test out_d == d
+        @test out_m == m
     end
 end

@@ -1,108 +1,152 @@
-# ~~~ TILE ~~~
-struct Tile{T} <: AbstractMatrix{T}
-    data::NTuple{3, NTuple{3, T}}
+export isminimum,
+       snapshot,
+       shift,
+       distance,
+       meta,
+       streamdistmat,
+       recurrences,
+       time, 
+       entries
+
+# ~~~ MAIN OUTPUT OF ITERATION ~~~
+struct DistInfo{X, T, D}
+       x::X
+       Δ::Int
+       i::Int
+    dist::NTuple{3,NTuple{3,T}}
+    meta::NTuple{3,NTuple{3,D}}
 end
-Base.size(t::Tile) = (3, 3)
-Base.getindex(t::Tile, i, j) = t.data[i][j] 
 
-centre(t::Tile) = t[2, 2] 
+isminimum(d::DistInfo) = _isminimum(d.dist)
+ snapshot(d::DistInfo) = d.x
+    shift(d::DistInfo) = d.Δ
+     time(d::DistInfo) = d.i
+ distance(d::DistInfo) = _centre(d.dist)
+     meta(d::DistInfo) = _centre(d.meta)
 
-@inline function isminimum(t::Tile) 
-    (a, b, c), (d, e, f), (g, h, i) = t.data
+# helper functions on 3 by 3 tuples
+@inline function _isminimum(tup::NTuple{3,NTuple{3}})
+    (a, b, c), (d, e, f), (g, h, i) = tup
     e < min(min(a, b, c, d), min(f, g, h, i))
 end
+@inline _centre(tup::NTuple{3,NTuple{3}}) = tup[2][2]
 
-# ~~~ Tile iterator over a slice ~~~
-struct TileIterator{D, X}
-              x::X
-              R::Vector{Vector{D}}
-    startoffset::Int
+# ~~~ View over entries of distance matrix ~~~
+mutable struct DistMatrixView{F,T,D,X,S<:StreamView{X}} <: AbstractVector{DistInfo{X, T, D}}
+     distfun::F
+        dist::Vector{Vector{T}}
+        meta::Vector{Vector{D}}
+      window::S
+           x::S
+    ΔminΔmax::UnitRange{Int}
+           i::Int
 end
 
-@inline Base.start(s::TileIterator)        = s.startoffset
-@inline Base.done( s::TileIterator, state) = state == length(s.R[1])-1
-@inline function Base.next(s::TileIterator, state)
+# outer constructor
+DistMatrixView(distfun::F,
+               dist::Vector{Vector{T}},
+               meta::Vector{Vector{D}},
+               window::S,
+               x::S,
+               ΔminΔmax::UnitRange,
+               i::Int) where {F, T, D, S<:StreamView{X}} where {X} =
+    DistMatrixView{F, T, D, X, S}(distfun, dist, meta, window, x, ΔminΔmax, i)
+
+unpack(x, rest...) = (x, rest)
+
+@inline function _kernel(dist, meta, x, window, distfun)
+    # use threads here
+    for i in eachindex(dist)
+        dist[i], meta[i] = unpack(distfun(x, window[i])...)
+    end
+    dist, meta
+end
+
+function step!(dmv::DistMatrixView)
+    d, m = _kernel(shift!(dmv.dist),
+                   shift!(dmv.meta),
+                   last(step!(dmv.x)),
+                   step!(dmv.window),
+                   dmv.distfun)
+    push!(dmv.dist, d)
+    push!(dmv.meta, m)
+    # update current index
+    dmv.i += 1
+    dmv
+end
+
+# ~~~ Iterator interface ~~~
+Base.indices(dmv::DistMatrixView) = (dmv.ΔminΔmax, )
+@inline function Base.getindex(dmv::DistMatrixView, Δ::Int)
+    checkbounds(dmv, Δ)
+    # Δ is the shift, so we have to calculate the 
+    # appropriate index in the dist and meta vectors
+    j = Δ - first(dmv.ΔminΔmax)+2
     @inbounds begin
-        a = s.R[1][state+2]; b = s.R[2][state+2]; c = s.R[3][state+2]
-        d = s.R[1][state+1]; e = s.R[2][state+1]; f = s.R[3][state+1]
-        g = s.R[1][state  ]; h = s.R[2][state  ]; i = s.R[3][state  ]
+        dist = ((dmv.dist[1][j+1], dmv.dist[2][j+1], dmv.dist[3][j+1]),
+                (dmv.dist[1][j  ], dmv.dist[2][j  ], dmv.dist[3][j  ]),
+                (dmv.dist[1][j-1], dmv.dist[2][j-1], dmv.dist[3][j-1]))
+        meta = ((dmv.meta[1][j+1], dmv.meta[2][j+1], dmv.meta[3][j+1]),
+                (dmv.meta[1][j  ], dmv.meta[2][j  ], dmv.meta[3][j  ]),
+                (dmv.meta[1][j-1], dmv.meta[2][j-1], dmv.meta[3][j-1]))
     end
-    # return the offset of the current tile and the tile
-    (s.x, state, Tile(((a, b, c),
-                       (d, e, f),
-                       (g, h, i)))), state+1
-end   
-
-
-# ~~~ THE STREAMING RECURRENCE MATRIX ~~~
-struct StreamDistMatrix{S<:StreamView, F, D}
-          sview::S
-           dist::F
-    startoffset::Int
-              R::Vector{Vector{D}} # three vectors of eltype D
+    # return current state
+    DistInfo(dmv.x[end-1], Δ, dmv.i, dist, meta)
 end
 
-function streamdistmat(sview::StreamView{X}, dist, startoffset::Int) where {X}
-    D = Core.Inference.return_type(dist, (X, X))
-    R = Vector{D}[] # do not fill with data yet
-    StreamDistMatrix(sview, dist, startoffset, R)
+# ~~~ Iteration over slices of distance matrix ~~~
+struct StreamDistMatrix{DMV<:DistMatrixView}
+    distmatv::DMV # view over the distance matrix
+           N::Int # number of views to generate
 end
 
-# ~~~ Iteration over the slices ~~~
-@inline function Base.start(srm::StreamDistMatrix)
-    # start view, get one snapshot, and initialise `R` properly
-    state = start(srm.sview)
-    d = srm.dist(first(srm.sview)), first(srm.sview)))
-    push!(srm.R, zeros(d, width(srm.view)))
-    push!(srm.R, zeros(d, width(srm.view)))
-    push!(srm.R, zeros(d, width(srm.view)))
-    # fill two entries, then return state (of the sview)
-    _, state = _advance(srm, state)
-    _, state = _advance(srm, state)
-    state
+function streamdistmat(g, x₀, distfun, ΔminΔmax::UnitRange, N::Int)
+      Δmax = last(ΔminΔmax)
+      Δmin = first(ΔminΔmax)
+    Δmin > 0 || throw(ArgumentError("Δmin must be positive, got $Δmin"))
+    # make view large enough so that we can find minima with
+    # shifts between Δmin and Δmax, included
+     width = Δmax-Δmin+3
+         x = streamview(g, copy(x₀), 3)
+    # shift forward window ahead such that the first minimum
+    # can be found for a discrete shift equal to Δmin.
+    window = streamview(g, copy(x₀), width); for i = 1:Δmin+1; step!(window); end
+    # obtain the type of the distance and meta information by computing
+    # the distance between to random snapshots. Then allocate.
+      d, m = unpack(distfun(x[1], window[1])...)
+      T, D = typeof(d), typeof(m)
+      dist = Vector{T}[Vector{T}(width) for i = 1:3]
+      meta = Vector{D}[Vector{D}(width) for i = 1:3]
+    # instantiate the view and then the StreamDistMatrix object
+    StreamDistMatrix(DistMatrixView(distfun, dist, meta, window, x, ΔminΔmax, 2), N)
 end
 
-@inline Base.next(srm::StreamDistMatrix, state) = _advance(srm, state)
+@inline Base.start(sdm::StreamDistMatrix) = (step!(sdm.distmatv);
+                                             step!(sdm.distmatv); 1)
 
-@inline function _advance(srm::StreamDistMatrix, state)
-    # get new snapshots
-    window, state = next(srm.sview, state)
-    # compute distances and shift
-    insert!(srm.R, 
-            length(srm.R), 
-            _kernel(shift!(srm.R), srm.startoffset, window, srm.dist))
-    # return slice of distance matrix and current snapshot
-    (srm.R, window[2]), state
+@inline Base.next(sdm::StreamDistMatrix, state) = (step!(sdm.distmatv), state+1)
+@inline Base.done(sdm::StreamDistMatrix, state) = state == sdm.N+1
+
+
+# ~~~ Iteration over the entries of the distance matrix ~~~
+struct StreamDistMatrixEntries{I}
+    itr::I
+    normalise::Bool
+    shifts::Tuple{Int, Int}
 end
 
-@inline function _kernel(r, startoffset, window, dist)
-    for i in startoffset:length(r)
-        r[i] = dist(window[1], window[i])
-    end
-    r
+entries(R::StreamDistMatrix, normalise::Bool=true) = 
+    StreamDistMatrixEntries(Iterators.flatten(R), 
+                            normalise, 
+                            (4, first(R.distmatv.ΔminΔmax)-1))
+
+@inline Base.start(s::StreamDistMatrixEntries) = start(s.itr)
+@inline function Base.next(s::StreamDistMatrixEntries, state) 
+    # update iterator
+    val, state = next(s.itr, state)
+    # unpack DistInfo and return items of interest
+    i = s.normalise ? time(val)  - s.shifts[1] : time(val)
+    j = s.normalise ? shift(val) - s.shifts[2] : shift(val)
+    (i, j, distance(val), meta(val)), state
 end
-
-@inline Base.done(srm::StreamDistMatrix, state) = done(srm.sview, state)
-
-# ~~~ Iteration over all tiles ~~~
-struct Tiles{D<:StreamDistMatrix}
-    d::D
-end
-
-@inline Base.start(t::Tiles) = start(t.d)
-@inline function Base.next(t::Tiles, state) 
-    (R, x), state = next(t.d, state)
-    TileIterator(x, R, t.d.startoffset), state
-end
-@inline Base.done(t::Tiles, state) = done(t.d, state)
-
-tiles(d::StreamDistMatrix) = Iterators.flatten(Tiles(d))
-
-# ~~~ Iterator over Recurrences  ~~~
-function recurrences(R::StreamDistMatrix, predicate::Function=(x->true))
-    # filter based on minima and custom predicate
-    g(data) = isminimum(data[2]) && predicate(centre(data[3]))
-    f = Iterators.filter(g, tiles(R))
-    # unpack and return: current state, offset and cargo
-    ((data[1], data[2]) for data in f)
-end
+@inline Base.done(s::StreamDistMatrixEntries, state) = done(s.itr, state)
