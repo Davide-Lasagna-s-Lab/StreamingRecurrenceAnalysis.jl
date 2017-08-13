@@ -1,4 +1,4 @@
-export streamdistmat, recurrences, entries, distance, meta, StreamDistMatrix
+export streamdistmat, recurrences, StreamDistMatrix
 
 # ~~~ DISTANCE INFO BETWEEN TWO STATES ~~~
 struct DistInfo{T, D}
