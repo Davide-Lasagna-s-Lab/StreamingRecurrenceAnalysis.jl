@@ -1,11 +1,11 @@
 export isminimum,
        snapshot,
-       shift,
+       ishift,
+       jshift,
        distance,
        meta,
        streamdistmat,
        recurrences,
-       time, 
        entries
 
 # ~~~ MAIN OUTPUT OF ITERATION ~~~
@@ -19,8 +19,8 @@ end
 
 isminimum(d::DistInfo) = _isminimum(d.dist)
  snapshot(d::DistInfo) = d.x
-    shift(d::DistInfo) = d.Δ
-     time(d::DistInfo) = d.i
+    jshift(d::DistInfo) = d.Δ
+    ishift(d::DistInfo) = d.i
  distance(d::DistInfo) = _centre(d.dist)
      meta(d::DistInfo) = _centre(d.meta)
 
@@ -145,8 +145,8 @@ entries(R::StreamDistMatrix, normalise::Bool=true) =
     # update iterator
     val, state = next(s.itr, state)
     # unpack DistInfo and return items of interest
-    i = s.normalise ? time(val)  - s.shifts[1] : time(val)
-    j = s.normalise ? shift(val) - s.shifts[2] : shift(val)
+    i = s.normalise ? ishift(val) - s.shifts[1] : ishift(val)
+    j = s.normalise ? jshift(val) - s.shifts[2] : jshift(val)
     (i, j, distance(val), meta(val)), state
 end
 @inline Base.done(s::StreamDistMatrixEntries, state) = done(s.itr, state)

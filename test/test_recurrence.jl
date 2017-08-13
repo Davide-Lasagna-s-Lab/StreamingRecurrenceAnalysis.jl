@@ -149,10 +149,10 @@ const DATA = [0.10000, 0.36000, 0.92160, 0.28901, 0.82193,
                     # at this point the current state is the fifth
                     @test snapshot(el) == DATA[c]
                     # the shift is what given via ΔminΔmax
-                    @test shift(el) == ΔminΔmax[i]
+                    @test jshift(el) == ΔminΔmax[i]
                     # check distance and meta
-                    @test distance(el) ==  dist(DATA[c], DATA[c+shift(el)])[1]
-                    @test     meta(el) == (dist(DATA[c], DATA[c+shift(el)])[2], )
+                    @test distance(el) ==  dist(DATA[c], DATA[c+jshift(el)])[1]
+                    @test     meta(el) == (dist(DATA[c], DATA[c+jshift(el)])[2], )
                 end
                 # shift and check again
                 step!(r)
