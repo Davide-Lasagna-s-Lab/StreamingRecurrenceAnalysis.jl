@@ -55,18 +55,16 @@ dist(x, y) = (round(abs(x-y), 5), round(x^2, 5))
             R = streamdistmat(LogisticMap(4), 0.1, dist, ΔminΔmax, N)
            
             # collect data
-            out_d, out_m = full(R)
+            out = full(R)
 
             # this is the expected output. We always start at four, because
             # we need three shifts from 2 to obtain the first full slice.
             # The streaming implementation loops over the entries of this
             # matrix, avoid the full storage of hyper-long simulations.
             # Note that the meta information is a matrix of tuples!
-            d = [ dist(DATA[i], DATA[i+j])[1]   for j = ΔminΔmax, i = 4:(4+N-1)]
-            m = [(dist(DATA[i], DATA[i+j])[2],) for j = ΔminΔmax, i = 4:(4+N-1)]
+            d = [dist(DATA[i], DATA[i+j]) for j = ΔminΔmax, i = 4:(4+N-1)]
         
-            @test out_d == d
-            @test out_m == m
+            @test out == d
         end
     end
 end
