@@ -125,6 +125,7 @@ end
 
 # ~~~ Iterator over recurrences  ~~~
 function recurrences(R::StreamDistMatrix, predicate::Function=x->true)
+    # filter recurrences based on minima and custom predicate
     itr = Iterators.filter(Iterators.flatten(R)) do args
         x, Δi, Δj, dinfo = args
         isrecurrence(dinfo) && predicate(pack(dinfo)) 
