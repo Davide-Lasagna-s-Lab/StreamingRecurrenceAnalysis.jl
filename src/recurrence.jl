@@ -12,7 +12,7 @@ isrecurrence(d::DistInfo) = _isrecurrence(d.dist)
         pack(d::DistInfo) = (dist(d), meta(d)...)
 
 # helper functions on 3 by 3 tuples
-@inline function _isrecurrence(tup::NTuple{3,NTuple{3}})
+function _isrecurrence(tup::NTuple{3,NTuple{3}})
     (a, b, c), (d, e, f), (g, h, i) = tup
     e < min(min(a, b, c, d), min(f, g, h, i))
 end
