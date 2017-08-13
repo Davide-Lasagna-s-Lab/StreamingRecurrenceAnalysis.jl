@@ -7,8 +7,9 @@ struct DistInfo{T, D}
 end
 
 isrecurrence(d::DistInfo) = _isrecurrence(d.dist)
-    distance(d::DistInfo) = d.dist[2][2]
+        dist(d::DistInfo) = d.dist[2][2]
         meta(d::DistInfo) = d.meta
+        pack(d::DistInfo) = (dist(d), meta(d)...)
 
 # helper functions on 3 by 3 tuples
 @inline function _isrecurrence(tup::NTuple{3,NTuple{3}})
@@ -16,14 +17,14 @@ isrecurrence(d::DistInfo) = _isrecurrence(d.dist)
     e < min(min(a, b, c, d), min(f, g, h, i))
 end
 
-# ~~~ VIEW OVER ENTRIES OF DISTANCE MATRIX ~~~
+# ~~~ VIEW OVER ENTRIES OF dist MATRIX ~~~
 struct DistMatrixView{T,D,F}
     distfun::F
        dist::Vector{Vector{T}}
        meta::Vector{Vector{D}}
 end
 
-# Update distance data with new current state and window
+# Update dist data with new current state and window
 function update!(dmv::DistMatrixView, x::X, window::StreamView{X}) where {X}
     d, m = _kernel(shift!(dmv.dist), shift!(dmv.meta),
                    x, window, dmv.distfun)
@@ -32,7 +33,7 @@ function update!(dmv::DistMatrixView, x::X, window::StreamView{X}) where {X}
     dmv
 end
 
-# update distance information with new snapshots
+# update dist information with new snapshots
 function _kernel(dist, meta, x::X, window::StreamView{X}, distfun) where {X}
     # use threads here
     for i in eachindex(dist)
@@ -55,9 +56,9 @@ function Base.next(dmv::DistMatrixView, j)
     DistInfo(dist, dmv.meta[2][j]), j+1
 end
 
-# ~~~ ITERATION OVER SLICES OF DISTANCE MATRIX ~~~
+# ~~~ ITERATION OVER SLICES OF dist MATRIX ~~~
 struct StreamDistMatrix{T,D,X,F,DMV<:DistMatrixView{T,D,F},S1<:StreamView{X},S2<:StreamView{X}}
-    distmatv::DMV            # current view over distance matrix
+    distmatv::DMV            # current view over dist matrix
     ΔminΔmax::UnitRange{Int} # range of shifts
       window::S1             # view over future snapshots
            x::S2             # view over current snapshots
@@ -75,7 +76,7 @@ function streamdistmat(g, x₀::X, distfun, ΔminΔmax::UnitRange, N::Int) where
     # shift forward window ahead such that the first minimum
     # can be found for a discrete shift equal to Δmin.
     window = streamview(g, copy(x₀), width); for i = 1:Δmin+1; step!(window); end
-    # obtain the type of the distance and meta information, then allocate.
+    # obtain the type of the dist and meta information, then allocate.
       d, m = unpack(distfun(x[1], window[1])...)
       T, D = typeof(d), typeof(m)
       dist = Vector{T}[Vector{T}(width) for i = 1:3]
@@ -98,25 +99,36 @@ end
 
 function Base.next(sdm::StreamDistMatrix, Δi)
     update!(sdm.distmatv, last(step!(sdm.x)), step!(sdm.window))
+    # elements of the flattened iterator will be (x, Δi, Δj, dinfo)
     return zip(Iterators.repeated(sdm.x[end-1]), 
                Iterators.repeated(Δi), 
                sdm.ΔminΔmax, 
-               sdm.distmatv), Δi + 1
+               sdm.distmatv), Δi+1
 end
 
 # generate N views in total
 Base.done(sdm::StreamDistMatrix, Δi) = Δi == sdm.N+4
 
-# Fill distance matrix (used mainly for plotting?)
+# Fill dist matrix (used mainly for plotting?)
 function Base.full(R::StreamDistMatrix{T, D}) where {T, D}
     Δmax, Δmin = last(R.ΔminΔmax), first(R.ΔminΔmax)
     shape = (Δmax-Δmin+1, R.N)
     d, m = Matrix{T}(shape), Matrix{D}(shape)
     for (i, r) in enumerate(R)
         for (j, (x, Δi, Δj, dinfo)) in enumerate(r)
-            d[j, i] = distance(dinfo)
+            d[j, i] = dist(dinfo)
             m[j, i] =     meta(dinfo)
         end
     end
     d, m
+end
+
+# ~~~ Iterator over recurrences  ~~~
+function recurrences(R::StreamDistMatrix, predicate::Function=x->true)
+    itr = Iterators.filter(Iterators.flatten(R)) do args
+        x, Δi, Δj, dinfo = args
+        isrecurrence(dinfo) && predicate(pack(dinfo)) 
+    end
+    # transform
+    ((rec[1], rec[2], rec[3], pack(rec[4])) for rec in itr)
 end
