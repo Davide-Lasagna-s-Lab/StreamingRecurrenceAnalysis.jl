@@ -110,17 +110,16 @@ Base.done(sdm::StreamDistMatrix, Δi) = Δi == sdm.N+4
 
 
 # ~~~ Iteration over the entries of the distance matrix ~~~
-struct StreamDistMatrixEntries{I, F}
+struct StreamDistMatrixEntries{I}
      itr::I    # flatten views
     Δmin::Int  # minimum shift
     size::Tuple{Int, Int}
-     fun::F    # what quantity to produce 
 end
 
-function entries(R::StreamDistMatrix, fun::Union{typeof.((distance, meta))...}=distance)
+function entries(R::StreamDistMatrix)
     Δmax = last(R.ΔminΔmax)
     Δmin = first(R.ΔminΔmax)
-    StreamDistMatrixEntries(Iterators.flatten(R), Δmin, (Δmax-Δmin+1, R.N), fun)
+    StreamDistMatrixEntries(Iterators.flatten(R), Δmin, (Δmax-Δmin+1, R.N))
 end
 
 # Iterator interface
@@ -132,6 +131,6 @@ Base.start(s::StreamDistMatrixEntries) = start(s.itr)
 function Base.next(s::StreamDistMatrixEntries, state) 
     # unpack and return items of interest
     (x, Δi, Δj, distinfo), state = next(s.itr, state)
-    s.fun(distinfo), state
+    (distance(distinfo), meta(distinfo)...), state
 end
 Base.done(s::StreamDistMatrixEntries, state) = done(s.itr, state)
