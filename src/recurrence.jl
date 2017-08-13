@@ -11,16 +11,16 @@ export isminimum,
 # ~~~ MAIN OUTPUT OF ITERATION ~~~
 struct DistInfo{X, T, D}
        x::X
-       Δ::Int
-       i::Int
+       Δj::Int
+       Δi::Int
     dist::NTuple{3,NTuple{3,T}}
     meta::NTuple{3,NTuple{3,D}}
 end
 
 isminimum(d::DistInfo) = _isminimum(d.dist)
  snapshot(d::DistInfo) = d.x
-    jshift(d::DistInfo) = d.Δ
-    ishift(d::DistInfo) = d.i
+    jshift(d::DistInfo) = d.Δj
+    ishift(d::DistInfo) = d.Δi
  distance(d::DistInfo) = _centre(d.dist)
      meta(d::DistInfo) = _centre(d.meta)
 
@@ -39,7 +39,7 @@ mutable struct DistMatrixView{F,T,D,X,S<:StreamView{X}} <: AbstractVector{DistIn
       window::S
            x::S
     ΔminΔmax::UnitRange{Int}
-           i::Int
+          Δi::Int
 end
 
 # outer constructor
@@ -49,8 +49,8 @@ DistMatrixView(distfun::F,
                window::S,
                x::S,
                ΔminΔmax::UnitRange,
-               i::Int) where {F, T, D, S<:StreamView{X}} where {X} =
-    DistMatrixView{F, T, D, X, S}(distfun, dist, meta, window, x, ΔminΔmax, i)
+               Δi::Int) where {F, T, D, S<:StreamView{X}} where {X} =
+    DistMatrixView{F, T, D, X, S}(distfun, dist, meta, window, x, ΔminΔmax, Δi)
 
 unpack(x, rest...) = (x, rest)
 
@@ -71,17 +71,17 @@ function step!(dmv::DistMatrixView)
     push!(dmv.dist, d)
     push!(dmv.meta, m)
     # update current index
-    dmv.i += 1
+    dmv.Δi += 1
     dmv
 end
 
 # ~~~ Iterator interface ~~~
 Base.indices(dmv::DistMatrixView) = (dmv.ΔminΔmax, )
-@inline function Base.getindex(dmv::DistMatrixView, Δ::Int)
-    checkbounds(dmv, Δ)
+@inline function Base.getindex(dmv::DistMatrixView, Δj::Int)
+    checkbounds(dmv, Δj)
     # Δ is the shift, so we have to calculate the 
     # appropriate index in the dist and meta vectors
-    j = Δ - first(dmv.ΔminΔmax)+2
+    j = Δj - first(dmv.ΔminΔmax)+2
     @inbounds begin
         dist = ((dmv.dist[1][j+1], dmv.dist[2][j+1], dmv.dist[3][j+1]),
                 (dmv.dist[1][j  ], dmv.dist[2][j  ], dmv.dist[3][j  ]),
@@ -91,7 +91,7 @@ Base.indices(dmv::DistMatrixView) = (dmv.ΔminΔmax, )
                 (dmv.meta[1][j-1], dmv.meta[2][j-1], dmv.meta[3][j-1]))
     end
     # return current state
-    DistInfo(dmv.x[end-1], Δ, dmv.i, dist, meta)
+    DistInfo(dmv.x[end-1], Δj, dmv.Δi, dist, meta)
 end
 
 # ~~~ Iteration over slices of distance matrix ~~~
@@ -145,8 +145,8 @@ entries(R::StreamDistMatrix, normalise::Bool=true) =
     # update iterator
     val, state = next(s.itr, state)
     # unpack DistInfo and return items of interest
-    i = s.normalise ? ishift(val) - s.shifts[1] : ishift(val)
-    j = s.normalise ? jshift(val) - s.shifts[2] : jshift(val)
-    (i, j, distance(val), meta(val)), state
+    Δi = s.normalise ? ishift(val) - s.shifts[1] : ishift(val)
+    Δj = s.normalise ? jshift(val) - s.shifts[2] : jshift(val)
+    (Δi, Δj, distance(val), meta(val)), state
 end
 @inline Base.done(s::StreamDistMatrixEntries, state) = done(s.itr, state)
