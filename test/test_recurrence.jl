@@ -53,16 +53,17 @@ const DATA = [0.10000, 0.36000, 0.92160, 0.28901, 0.82193,
         for N = [2, 5]
             # streaming object
             R = streamdistmat(LogisticMap(4), 0.1, dist, ΔminΔmax, N)
-            out = collect(entries(R))
-            out_d = [el[1] for el in out]
-            out_m = [el[2] for el in out]
+           
+            # collect data
+            out_d, out_m = full(R)
 
             # this is the expected output. We always start at four, because
             # we need three shifts from 2 to obtain the first full slice.
             # The streaming implementation loops over the entries of this
             # matrix, avoid the full storage of hyper-long simulations.
-            d = [dist(DATA[i], DATA[i+j])[1] for j = ΔminΔmax, i = 4:(4+N-1)]
-            m = [dist(DATA[i], DATA[i+j])[2] for j = ΔminΔmax, i = 4:(4+N-1)]
+            # Note that the meta information is a matrix of tuples!
+            d = [ dist(DATA[i], DATA[i+j])[1]   for j = ΔminΔmax, i = 4:(4+N-1)]
+            m = [(dist(DATA[i], DATA[i+j])[2],) for j = ΔminΔmax, i = 4:(4+N-1)]
         
             @test out_d == d
             @test out_m == m

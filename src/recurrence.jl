@@ -109,28 +109,14 @@ end
 Base.done(sdm::StreamDistMatrix, Δi) = Δi == sdm.N+4
 
 
-# ~~~ Iteration over the entries of the distance matrix ~~~
-struct StreamDistMatrixEntries{I}
-     itr::I    # flatten views
-    Δmin::Int  # minimum shift
-    size::Tuple{Int, Int}
+# Fill distance matrix (used mainly for plotting?)
+function Base.full(R::StreamDistMatrix)
+    # collect data in a vector
+    out = collect(last(el) for el in Iterators.flatten(R))
+    # split terms
+    Δmax, Δmin = last(R.ΔminΔmax), first(R.ΔminΔmax)
+    shape = (Δmax-Δmin+1, R.N)
+    d = reshape([distance(dinfo) for dinfo in out], shape)
+    m = reshape([    meta(dinfo) for dinfo in out], shape)
+    return d, m
 end
-
-function entries(R::StreamDistMatrix)
-    Δmax = last(R.ΔminΔmax)
-    Δmin = first(R.ΔminΔmax)
-    StreamDistMatrixEntries(Iterators.flatten(R), Δmin, (Δmax-Δmin+1, R.N))
-end
-
-# Iterator interface
-Base.iteratorsize(::Type{<:StreamDistMatrixEntries}) = Base.HasShape()
-Base.size(s::StreamDistMatrixEntries) = s.size
-Base.length(s::StreamDistMatrixEntries) = prod(size(s))
-
-Base.start(s::StreamDistMatrixEntries) = start(s.itr)
-function Base.next(s::StreamDistMatrixEntries, state) 
-    # unpack and return items of interest
-    (x, Δi, Δj, distinfo), state = next(s.itr, state)
-    (distance(distinfo), meta(distinfo)...), state
-end
-Base.done(s::StreamDistMatrixEntries, state) = done(s.itr, state)
