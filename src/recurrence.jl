@@ -11,16 +11,16 @@ export isminimum,
 # ~~~ MAIN OUTPUT OF ITERATION ~~~
 struct DistInfo{X, T, D}
        x::X
-       Δj::Int
-       Δi::Int
+      Δj::Int
+      Δi::Int
     dist::NTuple{3,NTuple{3,T}}
     meta::NTuple{3,NTuple{3,D}}
 end
 
 isminimum(d::DistInfo) = _isminimum(d.dist)
  snapshot(d::DistInfo) = d.x
-    jshift(d::DistInfo) = d.Δj
-    ishift(d::DistInfo) = d.Δi
+   jshift(d::DistInfo) = d.Δj
+   ishift(d::DistInfo) = d.Δi
  distance(d::DistInfo) = _centre(d.dist)
      meta(d::DistInfo) = _centre(d.meta)
 
