@@ -3,7 +3,7 @@ using Base.Test
 using  StreamingRecurrenceAnalysis
 import StreamingRecurrenceAnalysis: _isrecurrence
 
-@testset "Tile                                   " begin
+@testset "3 by 3 tuple                           " begin
     t = ((1, 2, 3),
          (1, 0, 3),
          (1, 2, 3))
