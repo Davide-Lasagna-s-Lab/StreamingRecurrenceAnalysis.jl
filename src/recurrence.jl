@@ -1,16 +1,5 @@
 export streamdistmat, recurrences, StreamDistMatrix
 
-# ~~~ DISTANCE INFO BETWEEN TWO STATES ~~~
-struct DistInfo{T, D}
-    dist::NTuple{3,NTuple{3,T}}
-    meta::D
-end
-
-isrecurrence(d::DistInfo) = _isrecurrence(d.dist)
-        dist(d::DistInfo) = d.dist[2][2]
-        meta(d::DistInfo) = d.meta
-        pack(d::DistInfo) = (dist(d), meta(d)...)
-
 # helper functions on 3 by 3 tuples
 function _isrecurrence(tup::NTuple{3,NTuple{3}})
     (a, b, c), (d, e, f), (g, h, i) = tup
@@ -26,10 +15,8 @@ end
 
 # Update dist data with new current state and window
 function update!(dmv::DistMatrixView, x::X, window::StreamView{X}) where {X}
-    d, m = _kernel(shift!(dmv.dist), shift!(dmv.meta),
-                   x, window, dmv.distfun)
-    push!(dmv.dist, d)
-    push!(dmv.meta, m)
+    d, m = _kernel(shift!(dmv.dist), shift!(dmv.meta), x, window, dmv.distfun)
+    push!(dmv.dist, d); push!(dmv.meta, m)
     dmv
 end
 
@@ -49,11 +36,12 @@ Base.start(dmv::DistMatrixView) = 2
 Base.done(dmv::DistMatrixView, j) = j == length(dmv.dist[1])
 function Base.next(dmv::DistMatrixView, j)
     @inbounds begin
-        dist = ((dmv.dist[1][j+1], dmv.dist[2][j+1], dmv.dist[3][j+1]),
-                (dmv.dist[1][j  ], dmv.dist[2][j  ], dmv.dist[3][j  ]),
-                (dmv.dist[1][j-1], dmv.dist[2][j-1], dmv.dist[3][j-1]))
+        # pre check we have a minimum
+        isrec = _isrecurrence(((dmv.dist[1][j+1], dmv.dist[2][j+1], dmv.dist[3][j+1]),
+                               (dmv.dist[1][j  ], dmv.dist[2][j  ], dmv.dist[3][j  ]),
+                               (dmv.dist[1][j-1], dmv.dist[2][j-1], dmv.dist[3][j-1])))
     end
-    DistInfo(dist, dmv.meta[2][j]), j+1
+    (dmv.dist[2][j], dmv.meta[2][j], isrec), j+1
 end
 
 # ~~~ ITERATION OVER SLICES OF dist MATRIX ~~~
@@ -113,23 +101,23 @@ Base.done(sdm::StreamDistMatrix, Δi) = Δi == sdm.N+4
 function Base.full(R::StreamDistMatrix{T, D}) where {T, D}
     Δmax, Δmin = last(R.ΔminΔmax), first(R.ΔminΔmax)
     shape = (Δmax-Δmin+1, R.N)
-    d, m = Matrix{T}(shape), Matrix{D}(shape)
+    dist, meta = Matrix{T}(shape), Matrix{D}(shape)
     for (i, r) in enumerate(R)
-        for (j, (x, Δi, Δj, dinfo)) in enumerate(r)
-            d[j, i] = dist(dinfo)
-            m[j, i] = meta(dinfo)
+        for (j, (x, Δi, Δj, (d, m, isrec))) in enumerate(r)
+            dist[j, i] = d
+            meta[j, i] = m
         end
     end
-    d, m
+    dist, meta
 end
 
 # ~~~ Iterator over recurrences  ~~~
 function recurrences(R::StreamDistMatrix, predicate::Function=x->true)
     # filter recurrences based on minima and custom predicate
     itr = Iterators.filter(Iterators.flatten(R)) do args
-        x, Δi, Δj, dinfo = args
-        isrecurrence(dinfo) && predicate(pack(dinfo)) 
+        x, Δi, Δj, (d, m, isrec) = args
+        isrec && predicate((d, m...)) 
     end
     # transform
-    ((rec[1], rec[2], rec[3], pack(rec[4])) for rec in itr)
+    ((rec[1], rec[2], rec[3], (rec[4][1], rec[4][2]...)) for rec in itr)
 end
