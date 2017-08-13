@@ -102,12 +102,21 @@ function Base.full(R::StreamDistMatrix{D}) where {D}
 end
 
 # ~~~ Iterator over recurrences  ~~~
-function recurrences(R::StreamDistMatrix, predicate::Function=x->true)
-    # filter recurrences based on minima and custom predicate
+struct Recurrences{D,X,I}
+    itr::I
+end
+
+function recurrences(R::StreamDistMatrix{D,X}, predicate::Function=x->true) where {D,X}
     itr = Iterators.filter(Iterators.flatten(R)) do args
         x, Δi, Δj, (d, isrec) = args
-        isrec && predicate(d) 
+        isrec && predicate(d)
     end
-    # transform
-    ((rec[1], rec[2], rec[3], rec[4][1]) for rec in itr)
+    Recurrences{D,X,typeof(itr)}(itr)
 end
+
+Base.start(recs::Recurrences) = start(recs.itr)
+function Base.next(recs::Recurrences{D,X}, state) where {D,X}
+    rec, state = next(recs.itr, state)
+    (rec[1], rec[2], rec[3], rec[4][1])::Tuple{X,Int,Int,D}, state
+end
+Base.done(recs::Recurrences, state) = done(recs.itr, state)

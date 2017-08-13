@@ -114,5 +114,4 @@ end
     for (i, rec) in enumerate(recurrences(R, predicate))
         @test rec == expected[i]
     end
-
 end
