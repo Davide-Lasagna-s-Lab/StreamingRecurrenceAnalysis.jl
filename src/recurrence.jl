@@ -1,60 +1,39 @@
-export isrecurrence,
-       snapshot,
-       ishift,
-       jshift,
-       distance,
-       meta,
-       streamdistmat,
-       recurrences,
-       entries
+export streamdistmat, recurrences, entries
 
-# ~~~ MAIN OUTPUT OF ITERATION ~~~
-struct DistInfo{X, T, D}
-       x::X
-      Δj::Int
-      Δi::Int
+# ~~~ DISTANCE INFO BETWEEN TWO STATES ~~~
+struct DistInfo{T, D}
     dist::NTuple{3,NTuple{3,T}}
-    meta::NTuple{3,NTuple{3,D}}
+    meta::D
 end
 
 isrecurrence(d::DistInfo) = _isrecurrence(d.dist)
-    snapshot(d::DistInfo) = d.x
-      jshift(d::DistInfo) = d.Δj
-      ishift(d::DistInfo) = d.Δi
-    distance(d::DistInfo) = _centre(d.dist)
-        meta(d::DistInfo) = _centre(d.meta)
+    distance(d::DistInfo) = d.dist[2][2]
+        meta(d::DistInfo) = d.meta
 
 # helper functions on 3 by 3 tuples
 @inline function _isrecurrence(tup::NTuple{3,NTuple{3}})
     (a, b, c), (d, e, f), (g, h, i) = tup
     e < min(min(a, b, c, d), min(f, g, h, i))
 end
-@inline _centre(tup::NTuple{3,NTuple{3}}) = tup[2][2]
 
-# ~~~ View over entries of distance matrix ~~~
-mutable struct DistMatrixView{F,T,D,X,S<:StreamView{X}} <: AbstractVector{DistInfo{X, T, D}}
-     distfun::F
-        dist::Vector{Vector{T}}
-        meta::Vector{Vector{D}}
-      window::S
-           x::S
-    ΔminΔmax::UnitRange{Int}
-          Δi::Int
+# ~~~ VIEW OVER ENTRIES OF DISTANCE MATRIX ~~~
+struct DistMatrixView{F,T,D}
+    distfun::F
+       dist::Vector{Vector{T}}
+       meta::Vector{Vector{D}}
 end
 
-# outer constructor
-DistMatrixView(distfun::F,
-               dist::Vector{Vector{T}},
-               meta::Vector{Vector{D}},
-               window::S,
-               x::S,
-               ΔminΔmax::UnitRange,
-               Δi::Int) where {F, T, D, S<:StreamView{X}} where {X} =
-    DistMatrixView{F, T, D, X, S}(distfun, dist, meta, window, x, ΔminΔmax, Δi)
+# Update distance data with new current state and window
+function update!(dmv::DistMatrixView, x::X, window::StreamView{X}) where {X}
+    d, m = _kernel(shift!(dmv.dist), shift!(dmv.meta),
+                   x, window, dmv.distfun)
+    push!(dmv.dist, d)
+    push!(dmv.meta, m)
+    dmv
+end
 
-unpack(x, rest...) = (x, rest)
-
-@inline function _kernel(dist, meta, x, window, distfun)
+# update distance information with new snapshots
+function _kernel(dist, meta, x::X, window::StreamView{X}, distfun) where {X}
     # use threads here
     for i in eachindex(dist)
         dist[i], meta[i] = unpack(distfun(x, window[i])...)
@@ -62,45 +41,30 @@ unpack(x, rest...) = (x, rest)
     dist, meta
 end
 
-function step!(dmv::DistMatrixView)
-    d, m = _kernel(shift!(dmv.dist),
-                   shift!(dmv.meta),
-                   last(step!(dmv.x)),
-                   step!(dmv.window),
-                   dmv.distfun)
-    push!(dmv.dist, d)
-    push!(dmv.meta, m)
-    # update current index
-    dmv.Δi += 1
-    dmv
-end
+unpack(x, rest...) = (x, rest)
 
-# ~~~ Iterator interface ~~~
-Base.indices(dmv::DistMatrixView) = (dmv.ΔminΔmax, )
-@inline function Base.getindex(dmv::DistMatrixView, Δj::Int)
-    checkbounds(dmv, Δj)
-    # Δ is the shift, so we have to calculate the 
-    # appropriate index in the dist and meta vectors
-    j = Δj - first(dmv.ΔminΔmax)+2
+# Iterator interface 
+Base.start(dmv::DistMatrixView) = 2
+Base.done(dmv::DistMatrixView, j) = j == length(dmv.dist[1])
+function Base.next(dmv::DistMatrixView, j)
     @inbounds begin
         dist = ((dmv.dist[1][j+1], dmv.dist[2][j+1], dmv.dist[3][j+1]),
                 (dmv.dist[1][j  ], dmv.dist[2][j  ], dmv.dist[3][j  ]),
                 (dmv.dist[1][j-1], dmv.dist[2][j-1], dmv.dist[3][j-1]))
-        meta = ((dmv.meta[1][j+1], dmv.meta[2][j+1], dmv.meta[3][j+1]),
-                (dmv.meta[1][j  ], dmv.meta[2][j  ], dmv.meta[3][j  ]),
-                (dmv.meta[1][j-1], dmv.meta[2][j-1], dmv.meta[3][j-1]))
     end
-    # return current state
-    DistInfo(dmv.x[end-1], Δj, dmv.Δi, dist, meta)
+    DistInfo(dist, dmv.meta[2][j]), j+1
 end
 
-# ~~~ Iteration over slices of distance matrix ~~~
-struct StreamDistMatrix{DMV<:DistMatrixView}
-    distmatv::DMV # view over the distance matrix
-           N::Int # number of views to generate
+# ~~~ ITERATION OVER SLICES OF DISTANCE MATRIX ~~~
+struct StreamDistMatrix{DMV<:DistMatrixView, X, S1<:StreamView{X}, S2<:StreamView{X}}
+    distmatv::DMV            # current view over distance matrix
+    ΔminΔmax::UnitRange{Int} # range of shifts
+      window::S1             # view over future snapshots
+           x::S2             # view over current snapshots
+           N::Int            # number of views to generate
 end
 
-function streamdistmat(g, x₀, distfun, ΔminΔmax::UnitRange, N::Int)
+function streamdistmat(g, x₀::X, distfun, ΔminΔmax::UnitRange, N::Int) where {X}
       Δmax = last(ΔminΔmax)
       Δmin = first(ΔminΔmax)
     Δmin > 0 || throw(ArgumentError("Δmin must be positive, got $Δmin"))
@@ -111,42 +75,56 @@ function streamdistmat(g, x₀, distfun, ΔminΔmax::UnitRange, N::Int)
     # shift forward window ahead such that the first minimum
     # can be found for a discrete shift equal to Δmin.
     window = streamview(g, copy(x₀), width); for i = 1:Δmin+1; step!(window); end
-    # obtain the type of the distance and meta information by computing
-    # the distance between to random snapshots. Then allocate.
+    # obtain the type of the distance and meta information, then allocate.
       d, m = unpack(distfun(x[1], window[1])...)
       T, D = typeof(d), typeof(m)
       dist = Vector{T}[Vector{T}(width) for i = 1:3]
       meta = Vector{D}[Vector{D}(width) for i = 1:3]
     # instantiate the view and then the StreamDistMatrix object
-    StreamDistMatrix(DistMatrixView(distfun, dist, meta, window, x, ΔminΔmax, 2), N)
+       dmv = DistMatrixView(distfun, dist, meta)
+    StreamDistMatrix{typeof(dmv), 
+                     X, 
+                     typeof(window), 
+                         typeof(x)}(dmv, ΔminΔmax, window, x, N)
 end
 
-@inline Base.start(sdm::StreamDistMatrix) = (step!(sdm.distmatv);
-                                             step!(sdm.distmatv); 1)
+# Iterator interface
+function Base.start(sdm::StreamDistMatrix)
+    update!(sdm.distmatv, last(      sdm.x),        sdm.window)
+    update!(sdm.distmatv, last(step!(sdm.x)), step!(sdm.window))
+    # this is the index of the first state 
+    # for which we can determine recurrences
+    return 4 
+end
 
-@inline Base.next(sdm::StreamDistMatrix, state) = (step!(sdm.distmatv), state+1)
-@inline Base.done(sdm::StreamDistMatrix, state) = state == sdm.N+1
+function Base.next(sdm::StreamDistMatrix, Δi)
+    update!(sdm.distmatv, last(step!(sdm.x)), step!(sdm.window))
+    return zip(Iterators.repeated(sdm.x[end-1]), 
+               Iterators.repeated(Δi), 
+               sdm.ΔminΔmax, 
+               sdm.distmatv), Δi + 1
+end
+
+# generate N views in total
+Base.done(sdm::StreamDistMatrix, Δi) = Δi == sdm.N+4
 
 
 # ~~~ Iteration over the entries of the distance matrix ~~~
 struct StreamDistMatrixEntries{I}
-    itr::I
-    normalise::Bool
-    shifts::Tuple{Int, Int}
+          itr::I    # flatten views
+         Δmin::Int  # minimum shift
+    normalise::Bool 
 end
 
 entries(R::StreamDistMatrix, normalise::Bool=true) = 
-    StreamDistMatrixEntries(Iterators.flatten(R), 
-                            normalise, 
-                            (4, first(R.distmatv.ΔminΔmax)-1))
+    StreamDistMatrixEntries(Iterators.flatten(R), first(R.ΔminΔmax), normalise)
 
-@inline Base.start(s::StreamDistMatrixEntries) = start(s.itr)
-@inline function Base.next(s::StreamDistMatrixEntries, state) 
-    # update iterator
-    val, state = next(s.itr, state)
-    # unpack DistInfo and return items of interest
-    Δi = s.normalise ? ishift(val) - s.shifts[1] : ishift(val)
-    Δj = s.normalise ? jshift(val) - s.shifts[2] : jshift(val)
-    (Δi, Δj, distance(val), meta(val)), state
+Base.start(s::StreamDistMatrixEntries) = start(s.itr)
+function Base.next(s::StreamDistMatrixEntries, state) 
+    # unpack and return items of interest
+    (x, Δi, Δj, distinfo), state = next(s.itr, state)
+    Δi = s.normalise ? Δi - 3         : Δi
+    Δj = s.normalise ? Δj - s.Δmin + 1: Δj
+    (Δi, Δj, distance(distinfo), meta(distinfo)), state
 end
-@inline Base.done(s::StreamDistMatrixEntries, state) = done(s.itr, state)
+Base.done(s::StreamDistMatrixEntries, state) = done(s.itr, state)
