@@ -1,7 +1,7 @@
 using BenchmarkTools
 using Base.Test
 using  StreamingRecurrenceAnalysis
-import StreamingRecurrenceAnalysis: _isminimum, 
+import StreamingRecurrenceAnalysis: _isrecurrence, 
                                     _centre,
                                     unpack,
                                     step!
@@ -11,25 +11,25 @@ import StreamingRecurrenceAnalysis: _isminimum,
     t = ((1, 2, 3),
          (1, 0, 3),
          (1, 2, 3))
-    @test _isminimum(t) == true
+    @test _isrecurrence(t) == true
     @test _centre(t) == 0
 
     t = ((1, 0, 3),
          (1, 4, 3),
          (1, 2, 3))
-    @test _isminimum(t) == false
+    @test _isrecurrence(t) == false
     @test _centre(t) == 4
 
     t = ((1, 1, 1),
          (1, 1, 1),
          (1, 1, 1))
-    @test _isminimum(t) == false
+    @test _isrecurrence(t) == false
     @test _centre(t) == 1
 
     t = ((1, 2, 1),
          (1, 1, 1),
          (1, 1, 1))
-    @test _isminimum(t) == false
+    @test _isrecurrence(t) == false
     @test _centre(t) == 1
 end
 

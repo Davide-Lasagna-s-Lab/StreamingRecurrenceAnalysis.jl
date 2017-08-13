@@ -1,4 +1,4 @@
-export isminimum,
+export isrecurrence,
        snapshot,
        ishift,
        jshift,
@@ -17,15 +17,15 @@ struct DistInfo{X, T, D}
     meta::NTuple{3,NTuple{3,D}}
 end
 
-isminimum(d::DistInfo) = _isminimum(d.dist)
- snapshot(d::DistInfo) = d.x
-   jshift(d::DistInfo) = d.Δj
-   ishift(d::DistInfo) = d.Δi
- distance(d::DistInfo) = _centre(d.dist)
-     meta(d::DistInfo) = _centre(d.meta)
+isrecurrence(d::DistInfo) = _isrecurrence(d.dist)
+    snapshot(d::DistInfo) = d.x
+      jshift(d::DistInfo) = d.Δj
+      ishift(d::DistInfo) = d.Δi
+    distance(d::DistInfo) = _centre(d.dist)
+        meta(d::DistInfo) = _centre(d.meta)
 
 # helper functions on 3 by 3 tuples
-@inline function _isminimum(tup::NTuple{3,NTuple{3}})
+@inline function _isrecurrence(tup::NTuple{3,NTuple{3}})
     (a, b, c), (d, e, f), (g, h, i) = tup
     e < min(min(a, b, c, d), min(f, g, h, i))
 end
