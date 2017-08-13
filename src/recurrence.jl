@@ -107,7 +107,6 @@ end
 # generate N views in total
 Base.done(sdm::StreamDistMatrix, Δi) = Δi == sdm.N+4
 
-
 # Fill distance matrix (used mainly for plotting?)
 function Base.full(R::StreamDistMatrix{T, D}) where {T, D}
     Δmax, Δmin = last(R.ΔminΔmax), first(R.ΔminΔmax)
