@@ -117,7 +117,7 @@ function Base.full(R::StreamDistMatrix{T, D}) where {T, D}
     for (i, r) in enumerate(R)
         for (j, (x, Δi, Δj, dinfo)) in enumerate(r)
             d[j, i] = dist(dinfo)
-            m[j, i] =     meta(dinfo)
+            m[j, i] = meta(dinfo)
         end
     end
     d, m
