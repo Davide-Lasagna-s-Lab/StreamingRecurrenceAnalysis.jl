@@ -79,7 +79,7 @@ end
 
 function Base.next(sdm::StreamDistMatrix, Δi)
     update!(sdm.distmatv, last(step!(sdm.x)), step!(sdm.window))
-    # elements of the flattened iterator will be (x, Δi, Δj, dinfo)
+    # elements of the flattened iterator will be (x, Δi, Δj, (d, isrec))
     return zip(Iterators.repeated(sdm.x[end-1]), 
                Iterators.repeated(Δi), 
                sdm.ΔminΔmax, 
@@ -92,8 +92,7 @@ Base.done(sdm::StreamDistMatrix, Δi) = Δi == sdm.N+4
 # Fill dist matrix (used mainly for plotting?)
 function Base.full(R::StreamDistMatrix{D}) where {D}
     Δmax, Δmin = last(R.ΔminΔmax), first(R.ΔminΔmax)
-    shape = (Δmax-Δmin+1, R.N)
-    distmeta = Matrix{D}(shape)
+    distmeta = Matrix{D}(Δmax-Δmin+1, R.N)
     for (i, r) in enumerate(R)
         for (j, (x, Δi, Δj, (d, isrec))) in enumerate(r)
             distmeta[j, i] = d
