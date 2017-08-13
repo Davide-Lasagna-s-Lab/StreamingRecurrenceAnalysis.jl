@@ -43,6 +43,7 @@ const DATA = [0.10000, 0.36000, 0.92160, 0.28901, 0.82193,
               0.14737, 0.50261, 0.99997, 0.00012, 0.00048,
               0.00192, 0.00767, 0.03044, 0.11805, 0.41646, 
               0.97208, 0.10856, 0.38710, 0.94901, 0.19356]
+dist(x, y) = (abs(x-y), x^2)
 
 @testset "Distance Matrix Entries                " begin
     # the distance function plus meta information

@@ -1,4 +1,4 @@
-export streamdistmat, recurrences, entries, distance, meta
+export streamdistmat, recurrences, entries, distance, meta, StreamDistMatrix
 
 # ~~~ DISTANCE INFO BETWEEN TWO STATES ~~~
 struct DistInfo{T, D}
@@ -56,7 +56,7 @@ function Base.next(dmv::DistMatrixView, j)
 end
 
 # ~~~ ITERATION OVER SLICES OF DISTANCE MATRIX ~~~
-struct StreamDistMatrix{DMV<:DistMatrixView, X, S1<:StreamView{X}, S2<:StreamView{X}}
+struct StreamDistMatrix{T, D, X, F, DMV<:DistMatrixView{F, T, D}, S1<:StreamView{X}, S2<:StreamView{X}}
     distmatv::DMV            # current view over distance matrix
     ΔminΔmax::UnitRange{Int} # range of shifts
       window::S1             # view over future snapshots
@@ -82,10 +82,9 @@ function streamdistmat(g, x₀::X, distfun, ΔminΔmax::UnitRange, N::Int) where
       meta = Vector{D}[Vector{D}(width) for i = 1:3]
     # instantiate the view and then the StreamDistMatrix object
        dmv = DistMatrixView(distfun, dist, meta)
-    StreamDistMatrix{typeof(dmv), 
-                     X, 
-                     typeof(window), 
-                         typeof(x)}(dmv, ΔminΔmax, window, x, N)
+    StreamDistMatrix{T, D, X, typeof(distfun),
+                     typeof(dmv), typeof(window), 
+                     typeof(x)}(dmv, ΔminΔmax, window, x, N)
 end
 
 # Iterator interface
@@ -110,13 +109,15 @@ Base.done(sdm::StreamDistMatrix, Δi) = Δi == sdm.N+4
 
 
 # Fill distance matrix (used mainly for plotting?)
-function Base.full(R::StreamDistMatrix)
-    # collect data in a vector
-    out = collect(last(el) for el in Iterators.flatten(R))
-    # split terms
+function Base.full(R::StreamDistMatrix{T, D}) where {T, D}
     Δmax, Δmin = last(R.ΔminΔmax), first(R.ΔminΔmax)
     shape = (Δmax-Δmin+1, R.N)
-    d = reshape([distance(dinfo) for dinfo in out], shape)
-    m = reshape([    meta(dinfo) for dinfo in out], shape)
-    return d, m
+    d, m = Matrix{T}(shape), Matrix{D}(shape)
+    for (i, r) in enumerate(R)
+        for (j, (x, Δi, Δj, dinfo)) in enumerate(r)
+            d[j, i] = distance(dinfo)
+            m[j, i] =     meta(dinfo)
+        end
+    end
+    d, m
 end
