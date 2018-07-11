@@ -38,7 +38,7 @@ function streamview(g, x₀::X, width::Int) where {X}
     for i = 1:width-1
         push!(buf, g(deepcopy(buf[end])))
     end
-    StreamView(g, buf)
+    return StreamView(g, buf)
 end
 
 # ~~~ Array interface ~~~
@@ -49,12 +49,12 @@ end
 @inline function step!(s::StreamView{X}) where {X}
     @inbounds s.buf[1] .= s.buf[end]
     push!(s.buf, s.g(shift!(s.buf)))
-    s
+    return s
 end
 
 # hack to work with numbers or tuple, add if needed
 _Immutable = Union{Number, Tuple{Number, Vararg{Number}}}
 @inline function step!(s::StreamView{<:_Immutable})
     shift!(push!(s.buf, s.g(s.buf[end])))
-    s
+    return s
 end
