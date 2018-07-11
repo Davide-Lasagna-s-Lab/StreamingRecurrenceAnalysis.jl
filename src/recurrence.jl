@@ -36,7 +36,7 @@ end
 # helper functions on 3 by 3 tuples
 function _isrecurrence(tup::NTuple{3,NTuple{3}})
     (a, b, c), (d, e, f), (g, h, i) = tup
-    e < min(min(a, b, c, d), min(f, g, h, i))
+    e < minimum((a, b, c, d, f, g, h, i))
 end
 
 # ~~~ ITERATION OVER SLICES OF dist MATRIX ~~~
