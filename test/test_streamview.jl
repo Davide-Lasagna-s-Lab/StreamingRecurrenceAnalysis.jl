@@ -1,6 +1,7 @@
 using BenchmarkTools
 using Base.Test
 using StreamingRecurrenceAnalysis
+import StreamingRecurrenceAnalysis: step!
 
 @testset "iteration protocol - width != 1        " begin
     g(x₀) = (x₀ .+= 1; x₀)

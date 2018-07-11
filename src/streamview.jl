@@ -1,4 +1,4 @@
-export StreamView, streamview, step!
+export StreamView, streamview
 
 struct StreamView{X,G} <: AbstractVector{X}
     g::G        
