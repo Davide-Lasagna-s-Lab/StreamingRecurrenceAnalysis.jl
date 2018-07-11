@@ -4,10 +4,12 @@ export streamdistmat, recurrences, StreamDistMatrix
 struct DistMatrixView{D, F}
      distfun::F
     dist::Vector{Vector{D}}
+    DistMatrixView(distfun::F, ::Type{D}, width::Int) where {F, D} =
+        new{D, F}(distfun, Vector{D}[Vector{D}(width) for i = 1:3])
 end
 
 # Update dist data with new current state and window
-update!(dmv::DistMatrixView, x::X, window::StreamView{X}) where {X} = 
+update!(dmv::DistMatrixView, x::X, window::StreamView{X}) where {X} =
     push!(dmv.dist, _kernel(shift!(dmv.dist), x, window, dmv.distfun))
 
 # update dist information with new snapshots
@@ -19,7 +21,7 @@ function _kernel(dist, x::X, window::StreamView{X}, distfun) where {X}
     dist
 end
 
-# Iterator interface 
+# Iterator interface
 Base.start(dmv::DistMatrixView) = 2
 Base.done(dmv::DistMatrixView, j) = j == length(dmv.dist[1])
 function Base.next(dmv::DistMatrixView, j)
@@ -49,22 +51,28 @@ struct StreamDistMatrix{D,X,DMV<:DistMatrixView{D},S1<:StreamView{X},S2<:StreamV
 end
 
 function streamdistmat(g, x₀::X, distfun, ΔminΔmax::UnitRange, N::Int) where {X}
-        Δmax = last(ΔminΔmax)
-        Δmin = first(ΔminΔmax)
-      Δmin > 0 || throw(ArgumentError("Δmin must be positive, got $Δmin"))
-      # make view large enough so that we can find minima with
-      # shifts between Δmin and Δmax, included
-       width = Δmax-Δmin+3
-           x = streamview(g, copy(x₀), 3)
-      # shift forward window ahead such that the first minimum
-      # can be found for a discrete shift equal to Δmin.
-      window = streamview(g, copy(x₀), width); for i = 1:Δmin+1; step!(window); end
-      # obtain the type of the distance information, then allocate.
-           D = typeof(distfun(x[1], window[1]))
-    dist = Vector{D}[Vector{D}(width) for i = 1:3]
-      # instantiate the view and then the StreamDistMatrix object
-         dmv = DistMatrixView(distfun, dist)
-      StreamDistMatrix{D, X, typeof(dmv), typeof(window), 
+    Δmin, Δmax = extrema(ΔminΔmax)
+    Δmin > 0 || throw(ArgumentError("Δmin must be positive, got $Δmin"))
+    # this is the sliding view of width 3, i.e. the minimum required
+    # to determine whether we have a local minimum. Essentially, this
+    # view is centered around the snapshot at time t, so that we will 
+    # find recurrences with snapshots at time t+T
+    x = streamview(g, copy(x₀), 3)
+    # make the width of the second streamview large enough so that we
+    # can find minima with shifts between Δmin and Δmax, included. This
+    # view contains "future" snapshots, that are compare to snapshots in
+    # the view x. Note we shift forward the window  such that the first 
+    # recurrence can be found for a discrete shift equal to Δmin.
+    window = streamview(g, copy(x₀), Δmax-Δmin+3)
+    for i = 1:Δmin+1; step!(window); end
+    # obtain the type of the distance information, then allocate. 
+    # D could be just a float, i.e. just a distance, or there could 
+    # be other meta information, e.g. the required translation for
+    # problems with continuous symmetries
+    D = typeof(distfun(x[1], window[1]))
+    # instantiate the view and then the StreamDistMatrix object
+    dmv = DistMatrixView(distfun, D, length(window))
+    StreamDistMatrix{D, X, typeof(dmv), typeof(window),
                        typeof(x)}(dmv, ΔminΔmax, window, x, N)
 end
 
@@ -72,17 +80,17 @@ end
 function Base.start(sdm::StreamDistMatrix)
     update!(sdm.dmv, last(      sdm.x),        sdm.window)
     update!(sdm.dmv, last(step!(sdm.x)), step!(sdm.window))
-    # this is the index of the first state 
+    # this is the index of the first state
     # for which we can determine recurrences
-    return 4 
+    return 4
 end
 
 function Base.next(sdm::StreamDistMatrix, Δi)
     update!(sdm.dmv, last(step!(sdm.x)), step!(sdm.window))
     # elements of the flattened iterator will be (x, Δi, Δj, (d, isrec))
-    return zip(Iterators.repeated(sdm.x[end-1]), 
-               Iterators.repeated(Δi), 
-               sdm.ΔminΔmax, 
+    return zip(Iterators.repeated(sdm.x[end-1]),
+               Iterators.repeated(Δi),
+               sdm.ΔminΔmax,
                sdm.dmv), Δi+1
 end
 
