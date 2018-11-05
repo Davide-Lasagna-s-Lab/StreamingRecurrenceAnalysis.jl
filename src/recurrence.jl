@@ -1,4 +1,7 @@
-export streamdistmat, recurrences, StreamDistMatrix
+export streamdistmat, recurrences, StreamDistMatrix, repeatf
+
+# repeat function function f n times on x using recursion
+repeatf(f, x, n::Int) = n > 1 ? f(repeatf(f, x, n-1)) : f(x)
 
 # ~~~ VIEW OVER ENTRIES OF dist MATRIX ~~~
 struct DistMatrixView{D, F}
@@ -82,20 +85,20 @@ function Base.start(sdm::StreamDistMatrix)
     update!(sdm.dmv, last(step!(sdm.x)), step!(sdm.window))
     # this is the index of the first state
     # for which we can determine recurrences
-    return 4
+    return 3
 end
 
 function Base.next(sdm::StreamDistMatrix, Δi)
     update!(sdm.dmv, last(step!(sdm.x)), step!(sdm.window))
     # elements of the flattened iterator will be (x, Δi, Δj, (d, isrec))
-    return zip(Iterators.repeated(sdm.x[end-1]),
+    return zip(Iterators.repeated(copy(sdm.x[end-1])),
                Iterators.repeated(Δi),
                sdm.ΔminΔmax,
                sdm.dmv), Δi+1
 end
 
 # generate N views in total
-Base.done(sdm::StreamDistMatrix, Δi) = Δi == sdm.N+4
+Base.done(sdm::StreamDistMatrix, Δi) = Δi == sdm.N+3
 
 # Fill dist matrix (used mainly for plotting?)
 function Base.full(R::StreamDistMatrix{D}) where {D}
