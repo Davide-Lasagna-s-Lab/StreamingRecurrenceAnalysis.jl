@@ -1,8 +1,3 @@
-using BenchmarkTools
-using Base.Test
-using  StreamingRecurrenceAnalysis
-import StreamingRecurrenceAnalysis: _isrecurrence
-
 @testset "3 by 3 tuple                           " begin
     t = ((1, 2, 3),
          (1, 0, 3),
@@ -29,7 +24,7 @@ end
 struct LogisticMap
     r::Float64
 end
-(k::LogisticMap)(x) = round(x*k.r*(1-x), 5)
+(k::LogisticMap)(x) = round(x*k.r*(1-x),; digits=5)
 
 # # GENERATE DATA
 # x = 0.1
@@ -45,7 +40,7 @@ const DATA = [0.10000, 0.36000, 0.92160, 0.28901, 0.82193,
               0.97208, 0.10856, 0.38710, 0.94901, 0.19356]
 
 # the distance function plus meta information
-dist(x, y) = (round(abs(x-y), 5), round(x^2, 5))
+dist(x, y) = (round(abs(x-y); digits=5), round(x^2, digits=5))
 
 @testset "Distance Matrix Entries                " begin
     # allowed shifts
@@ -94,8 +89,9 @@ end
     R = streamdistmat(LogisticMap(4), 0.1, dist, 2:3, 5)
 
     # expected value from table above
-    expected = [(DATA[5], 5, 2, (0.14887, 0.67557)), 
-                (DATA[7], 7, 3, (0.00911, 0.94245))]
+    expected = [(DATA[5], 4, 2, (0.14887, 0.67557)), 
+                (DATA[7], 6, 3, (0.00911, 0.94245))]
+
     # check
     for (i, rec) in enumerate(recurrences(R))
         @test rec == expected[i]
@@ -108,7 +104,7 @@ end
     R = streamdistmat(LogisticMap(4), 0.1, dist, 2:3, 5)
 
     # expected value from table above
-    expected = [(DATA[7], 7, 3, (0.00911, 0.94245))]
+    expected = [(DATA[7], 6, 3, (0.00911, 0.94245))]
     
     # check
     for (i, rec) in enumerate(recurrences(R, predicate))

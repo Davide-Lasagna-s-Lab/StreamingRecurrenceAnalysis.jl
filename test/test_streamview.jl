@@ -1,8 +1,3 @@
-using BenchmarkTools
-using Base.Test
-using StreamingRecurrenceAnalysis
-import StreamingRecurrenceAnalysis: step!
-
 @testset "iteration protocol - width != 1        " begin
     g(x₀) = (x₀ .+= 1; x₀)
     output = [[1], [2], [3], [4], [5], [6], [7], [8], [9]]
@@ -85,5 +80,5 @@ end
     dowork!(sview)
             
     # still small allocation in this test
-    @test (@allocated dowork!(sview)) == 16
+    @test (@allocated dowork!(sview)) == 0
 end

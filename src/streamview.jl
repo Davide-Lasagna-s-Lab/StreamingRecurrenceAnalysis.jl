@@ -48,13 +48,13 @@ end
 
 @inline function step!(s::StreamView{X}) where {X}
     @inbounds s.buf[1] .= s.buf[end]
-    push!(s.buf, s.g(shift!(s.buf)))
+    push!(s.buf, s.g(popfirst!(s.buf)))
     return s
 end
 
 # hack to work with numbers or tuple, add if needed
 _Immutable = Union{Number, Tuple{Number, Vararg{Number}}}
 @inline function step!(s::StreamView{<:_Immutable})
-    shift!(push!(s.buf, s.g(s.buf[end])))
+    popfirst!(push!(s.buf, s.g(s.buf[end])))
     return s
 end

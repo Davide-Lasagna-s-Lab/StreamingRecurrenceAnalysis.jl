@@ -1,4 +1,4 @@
-export streamdistmat, recurrences, StreamDistMatrix, repeatf
+export streamdistmat, recurrences, StreamDistMatrix, repeatf, full
 
 # repeat function function f n times on x using recursion
 repeatf(f, x, n::Int) = n > 1 ? f(repeatf(f, x, n-1)) : f(x)
@@ -8,12 +8,12 @@ struct DistMatrixView{D, F}
      distfun::F
     dist::Vector{Vector{D}}
     DistMatrixView(distfun::F, ::Type{D}, width::Int) where {F, D} =
-        new{D, F}(distfun, Vector{D}[Vector{D}(width) for i = 1:3])
+        new{D, F}(distfun, Vector{D}[Vector{D}(undef, width) for i = 1:3])
 end
 
 # Update dist data with new current state and window
 update!(dmv::DistMatrixView, x::X, window::StreamView{X}) where {X} =
-    push!(dmv.dist, _kernel(shift!(dmv.dist), x, window, dmv.distfun))
+    push!(dmv.dist, _kernel(popfirst!(dmv.dist), x, window, dmv.distfun))
 
 # update dist information with new snapshots
 function _kernel(dist, x::X, window::StreamView{X}, distfun) where {X}
@@ -25,17 +25,18 @@ function _kernel(dist, x::X, window::StreamView{X}, distfun) where {X}
 end
 
 # Iterator interface
-Base.start(dmv::DistMatrixView) = 2
-Base.done(dmv::DistMatrixView, j) = j == length(dmv.dist[1])
-function Base.next(dmv::DistMatrixView, j)
+# Base.eltype(dmv::DistMatrixView{D}) where {D} = D
+function Base.iterate(dmv::DistMatrixView, j::Int=2)
+    # check when finished
+    j == length(dmv.dist[1]) && return nothing
+
     @inbounds begin
-        # pre check we have a minimum
-        dist = dmv.dist
-        isrec = _isrecurrence(((dist[1][j+1][1], dist[2][j+1][1], dist[3][j+1][1]),
-                               (dist[1][j  ][1], dist[2][j  ][1], dist[3][j  ][1]),
-                               (dist[1][j-1][1], dist[2][j-1][1], dist[3][j-1][1])))
+        d = dmv.dist
+        isrec = _isrecurrence(((d[1][j+1][1], d[2][j+1][1], d[3][j+1][1]),
+                               (d[1][j  ][1], d[2][j  ][1], d[3][j  ][1]),
+                               (d[1][j-1][1], d[2][j-1][1], d[3][j-1][1])))
     end
-    (dmv.dist[2][j], isrec), j+1
+    return (dmv.dist[2][j], isrec), j+1
 end
 
 # helper functions on 3 by 3 tuples
@@ -80,16 +81,19 @@ function streamdistmat(g, x₀::X, distfun, ΔminΔmax::UnitRange, N::Int) where
 end
 
 # Iterator interface
-function Base.start(sdm::StreamDistMatrix)
-    update!(sdm.dmv, last(      sdm.x),        sdm.window)
-    update!(sdm.dmv, last(step!(sdm.x)), step!(sdm.window))
-    # this is the index of the first state
-    # for which we can determine recurrences
-    return 3
-end
+function Base.iterate(sdm::StreamDistMatrix, Δi = 3)
+    # warm up iterator
+    if Δi == 3
+        update!(sdm.dmv, last(      sdm.x),        sdm.window)
+        update!(sdm.dmv, last(step!(sdm.x)), step!(sdm.window))
+    end
 
-function Base.next(sdm::StreamDistMatrix, Δi)
+    # generate N views in total
+    Δi == sdm.N+3 && return nothing
+
+    # proper iteration update
     update!(sdm.dmv, last(step!(sdm.x)), step!(sdm.window))
+
     # elements of the flattened iterator will be (x, Δi, Δj, (d, isrec))
     return zip(Iterators.repeated(copy(sdm.x[end-1])),
                Iterators.repeated(Δi),
@@ -97,13 +101,10 @@ function Base.next(sdm::StreamDistMatrix, Δi)
                sdm.dmv), Δi+1
 end
 
-# generate N views in total
-Base.done(sdm::StreamDistMatrix, Δi) = Δi == sdm.N+3
-
 # Fill dist matrix (used mainly for plotting?)
-function Base.full(R::StreamDistMatrix{D}) where {D}
+function full(R::StreamDistMatrix{D}) where {D}
     Δmax, Δmin = last(R.ΔminΔmax), first(R.ΔminΔmax)
-    dist = Matrix{D}(Δmax-Δmin+1, R.N)
+    dist = Matrix{D}(undef, Δmax-Δmin+1, R.N)
     for (i, r) in enumerate(R)
         for (j, (x, Δi, Δj, (d, isrec))) in enumerate(r)
             dist[j, i] = d
@@ -125,9 +126,16 @@ function recurrences(R::StreamDistMatrix{D,X}, predicate::Function=x->true) wher
     Recurrences{D,X,typeof(itr)}(itr)
 end
 
-Base.start(recs::Recurrences) = start(recs.itr)
-function Base.next(recs::Recurrences{D,X}, state) where {D,X}
-    rec, state = next(recs.itr, state)
-    (rec[1], rec[2], rec[3], rec[4][1])::Tuple{X,Int,Int,D}, state
+function Base.iterate(recs::Recurrences{D,X}) where {D,X}
+    iter = Base.iterate(recs.itr)
+    iter == nothing && return nothing
+    args, state = iter
+    return (args[1], args[2], args[3], args[4][1])::Tuple{X,Int,Int,D}, state
 end
-Base.done(recs::Recurrences, state) = done(recs.itr, state)
+
+function Base.iterate(recs::Recurrences{D,X}, state) where {D,X}
+    iter = iterate(recs.itr, state)
+    iter == nothing && return nothing
+    args, state = iter
+    return (args[1], args[2], args[3], args[4][1])::Tuple{X,Int,Int,D}, state
+end
