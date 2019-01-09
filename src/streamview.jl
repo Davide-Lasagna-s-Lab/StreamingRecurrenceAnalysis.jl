@@ -36,7 +36,7 @@ function streamview(g, x₀::X, width::Int) where {X}
     # allocate memory and initialise
     buf = push!(sizehint!(X[], width), x₀)
     for i = 1:width-1
-        push!(buf, g(deepcopy(buf[end])))
+        push!(buf, g(copy(buf[end])))
     end
     return StreamView(g, buf)
 end
