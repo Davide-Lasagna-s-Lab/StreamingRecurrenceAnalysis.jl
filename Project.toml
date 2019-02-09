@@ -1,0 +1,7 @@
+name = "StreamingRecurrenceAnalysis"
+authors = ["Davide Lasagna <davide.lasagna@soton.ac.uk>"]
+version = "0.0.0"
+uuid = "042d9bae-2c59-11e9-23be-1940f146c892"
+
+[deps]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
