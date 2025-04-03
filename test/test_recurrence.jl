@@ -20,12 +20,6 @@
     @test _isrecurrence(t) == false
 end
 
-# truncated logistic map
-struct LogisticMap
-    r::Float64
-end
-(k::LogisticMap)(x) = round(x*k.r*(1-x),; digits=5)
-
 # # GENERATE DATA
 # x = 0.1
 # k = LogisticMap(4)

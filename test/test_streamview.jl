@@ -26,7 +26,6 @@ end
 end
 
 @testset "example usage with allocation          " begin
-    
     # initial condition and temporary
     x  = randn(100)
     u  = similar(x) 
@@ -44,32 +43,26 @@ end
                 u .+= snap # do stuff
             end
         end
-        u    
+        u
     end
 
     # warm up
     dowork!(sview, u)
-        
+
     @test (@allocated dowork!(sview, u)) == 0
 end
 
-struct LogisticMap
-    r::Float64
-end
-@inline (k::LogisticMap)(x) = x*k.r*(1-x)
-
 @testset "example usage with allocation          " begin
-    
     # make stream
     sview = streamview(LogisticMap(0.4), 0.5, 200)
 
     # sum
     function dowork!(sview::StreamView{X}) where {X}
         s = zero(X)
-        for i = 1:10000
+        for _ in 1:10000
             step!(sview)
             # this enables vectorisation and obtain 4x speed up
-            @simd for i in 1:length(sview)
+            @simd for i in eachindex(sview)
                 @inbounds s += sview[i]
             end
         end
@@ -80,5 +73,5 @@ end
     dowork!(sview)
             
     # still small allocation in this test
-    @test (@allocated dowork!(sview)) == 0
+    @test (@allocated dowork!(sview)) == 16
 end

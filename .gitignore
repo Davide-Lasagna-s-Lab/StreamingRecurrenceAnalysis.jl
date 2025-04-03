@@ -22,3 +22,5 @@ test/test_fifoqueue.jl
 test/test_slider.jl
 
 TODO
+
+Manifest.toml

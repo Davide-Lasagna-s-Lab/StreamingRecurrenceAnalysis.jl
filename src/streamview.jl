@@ -31,8 +31,7 @@ julia> step!(sview)
 
 """
 function streamview(g, x₀::X, width::Int) where {X}
-    width > 0 ||
-        throw(ArgumentError("width must be positive, got $(length(width))"))
+    width > 0 || throw(ArgumentError("width must be positive, got $(length(width))"))
     # allocate memory and initialise
     buf = push!(sizehint!(X[], width), x₀)
     for i = 1:width-1
