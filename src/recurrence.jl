@@ -5,8 +5,8 @@ repeatf(f, x, n::Int) = n > 1 ? f(repeatf(f, x, n-1)) : f(x)
 
 # ~~~ VIEW OVER ENTRIES OF dist MATRIX ~~~
 struct DistMatrixView{D, F}
-     distfun::F
-    dist::Vector{Vector{D}}
+    distfun::F
+       dist::Vector{Vector{D}}
     DistMatrixView(distfun::F, ::Type{D}, width::Int) where {F, D} =
         new{D, F}(distfun, Vector{D}[Vector{D}(undef, width) for i = 1:3])
 end
@@ -64,8 +64,8 @@ function streamdistmat(g, x₀::X, distfun, ΔminΔmax::UnitRange, N::Int) where
     x = streamview(g, copy(x₀), 3)
     # make the width of the second streamview large enough so that we
     # can find minima with shifts between Δmin and Δmax, included. This
-    # view contains "future" snapshots, that are compare to snapshots in
-    # the view x. Note we shift forward the window  such that the first 
+    # view contains "future" snapshots, that are compared to snapshots in
+    # the view x. Note we shift the window forward such that the first 
     # recurrence can be found for a discrete shift equal to Δmin.
     window = streamview(g, copy(x₀), Δmax-Δmin+3)
     for i = 1:Δmin+1; step!(window); end
@@ -128,14 +128,14 @@ end
 
 function Base.iterate(recs::Recurrences{D,X}) where {D,X}
     iter = Base.iterate(recs.itr)
-    iter == nothing && return nothing
+    isnothing(iter) && return nothing
     args, state = iter
     return (args[1], args[2], args[3], args[4][1])::Tuple{X,Int,Int,D}, state
 end
 
 function Base.iterate(recs::Recurrences{D,X}, state) where {D,X}
     iter = iterate(recs.itr, state)
-    iter == nothing && return nothing
+    isnothing(iter) && return nothing
     args, state = iter
     return (args[1], args[2], args[3], args[4][1])::Tuple{X,Int,Int,D}, state
 end
